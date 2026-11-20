@@ -9,17 +9,20 @@
 <style>
 /* =========================================================
    ESTILOS
-   Tema escuro fixo (app de câmera) e alto contraste.
+   Tema escuro fixo e alto contraste.
    ========================================================= */
 :root {
   --fundo: #000;
-  --painel: rgba(20, 20, 22, 0.95);
+  --painel: rgba(20, 20, 22, 0.97);
   --texto: #fff;
   --texto-suave: #c8c8c8;
   --destaque: #ffe600;          /* amarelo da legenda */
   --ok: #1fd17a;
   --erro: #ff5a5f;
   --borda: rgba(255, 255, 255, 0.22);
+  --cor-lucia: #ff8ad0;
+  --cor-jason: #6cb8ff;
+  --cor-auto: #e8e8e8;
   --margem: 16px;               /* margem lateral */
   --topo-seguro: env(safe-area-inset-top, 0px);
   --base-segura: env(safe-area-inset-bottom, 0px);
@@ -36,64 +39,24 @@ html, body {
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
 }
-body { overscroll-behavior: none; touch-action: manipulation; }
-button, input { font: inherit; }
-
-/* ---------- Vídeo da câmera em tela cheia ---------- */
-#video {
-  position: fixed;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-  object-fit: cover;             /* o recorte do OCR leva isso em conta */
-  background: #000;
-  z-index: 0;
-}
-
-/* ---------- Retângulo guia (área lida pelo OCR) ---------- */
-#guia {
-  position: fixed;
-  left: 50%; top: 50%;
-  width: 90%; height: 18%;       /* valores reais vêm do JS / localStorage */
-  transform: translate(-50%, -50%);
-  border: 2px solid var(--destaque);
-  border-radius: 10px;
-  box-shadow: 0 0 0 200vmax rgba(0, 0, 0, 0.4);   /* escurece o que fica fora */
-  pointer-events: none;
-  z-index: 1;
+body {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  overscroll-behavior: none;
+  touch-action: manipulation;
 }
-#guia-rotulo {
-  position: absolute;
-  left: 6px; top: -24px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--destaque);
-  text-shadow: 0 1px 2px #000;
-  white-space: nowrap;
-}
-#dica {
-  padding: 6px 12px;
-  text-align: center;
-  font-size: 14px;
-  line-height: 1.35;
-  color: var(--texto-suave);
-  overflow: hidden;
-  max-height: 100%;
-}
-body.rodando #dica { display: none; }
+button, input { font: inherit; }
 
 /* ---------- Barra superior ---------- */
 #topo {
-  position: fixed;
-  top: 0; left: 0; right: 0;
-  z-index: 5;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: calc(8px + var(--topo-seguro)) var(--margem) 8px;
-  background: linear-gradient(to bottom, rgba(0,0,0,0.78), rgba(0,0,0,0));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 #titulo {
   flex: 1 1 auto;
@@ -108,14 +71,14 @@ body.rodando #dica { display: none; }
 #status {
   flex: 0 1 auto;
   min-width: 0;
-  max-width: 55%;
+  max-width: 70%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 13px;
   padding: 6px 10px;
   border-radius: 999px;
-  background: rgba(0,0,0,0.6);
+  background: rgba(255,255,255,0.06);
   border: 1px solid var(--borda);
 }
 #status::before {
@@ -128,6 +91,7 @@ body.rodando #dica { display: none; }
   vertical-align: middle;
 }
 #status[data-tipo="ok"]::before { background: var(--ok); }
+#status[data-tipo="falando"]::before { background: var(--destaque); }
 #status[data-tipo="carregando"]::before { background: var(--destaque); animation: piscar 1s infinite; }
 #status[data-tipo="erro"]::before { background: var(--erro); }
 @keyframes piscar { 50% { opacity: 0.2; } }
@@ -147,8 +111,8 @@ body.rodando #dica { display: none; }
   font-weight: 700;
   cursor: pointer;
 }
-.btn:active { transform: scale(0.98); }
-.btn:focus-visible, .btn-icone:focus-visible, input:focus-visible {
+.btn:active, .btn-pers:active { transform: scale(0.98); }
+.btn:focus-visible, .btn-icone:focus-visible, .btn-pers:focus-visible, input:focus-visible {
   outline: 3px solid var(--destaque);
   outline-offset: 2px;
 }
@@ -157,9 +121,9 @@ body.rodando #dica { display: none; }
 .btn.grande {
   flex: 1 1 0;
   min-width: 0;
-  min-height: 60px;
+  min-height: 64px;
   padding: 8px 6px;
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 800;
   white-space: nowrap;
 }
@@ -167,7 +131,6 @@ body.rodando #dica { display: none; }
 .btn.parar { background: var(--erro); color: #000; border-color: transparent; }
 .btn.voz { background: var(--destaque); color: #000; border: 2px solid var(--destaque); }
 .btn.voz.desligada { background: #222; color: #fff; border: 2px solid #fff; }
-#btn-area { flex: 0.7 1 0; }
 .btn-icone {
   flex: 0 0 auto;
   width: 44px; height: 44px;
@@ -177,7 +140,7 @@ body.rodando #dica { display: none; }
   justify-content: center;
   border-radius: 12px;
   border: 1px solid var(--borda);
-  background: rgba(0,0,0,0.6);
+  background: rgba(255,255,255,0.06);
   color: #fff;
   cursor: pointer;
 }
@@ -191,11 +154,13 @@ body.rodando #dica { display: none; }
   top: calc(62px + var(--topo-seguro));
   max-width: 520px;
   margin: 0 auto;
-  padding: 6px 10px;
+  padding: 8px 12px;
   border-radius: 8px;
-  background: rgba(0,0,0,0.65);
-  color: #ddd;
-  font-size: 12px;
+  background: rgba(40,40,44,0.95);
+  border: 1px solid var(--borda);
+  color: #eee;
+  font-size: 13px;
+  line-height: 1.4;
   text-align: center;
 }
 #erro {
@@ -218,7 +183,7 @@ body.rodando #dica { display: none; }
 #erro-texto { flex: 1 1 auto; min-width: 0; padding-top: 4px; overflow-wrap: anywhere; }
 #erro-fechar { font-size: 22px; line-height: 1; }
 
-/* ---------- Painéis (voz e área) ---------- */
+/* ---------- Painel de configurações ---------- */
 .painel {
   position: fixed;
   z-index: 10;
@@ -226,7 +191,7 @@ body.rodando #dica { display: none; }
   top: calc(62px + var(--topo-seguro));
   max-width: 520px;
   margin: 0 auto;
-  max-height: calc(100% - 62px - var(--topo-seguro) - 100px - var(--base-segura));
+  max-height: calc(100% - 78px - var(--topo-seguro) - var(--base-segura));
   overflow-y: auto;
   padding: 16px;
   border-radius: 16px;
@@ -248,77 +213,99 @@ body.rodando #dica { display: none; }
   color: #fff;
   font-size: 16px;               /* 16px evita zoom automático no iOS */
 }
-.campo-range { display: block; margin-bottom: 6px; font-size: 15px; }
-.campo-range .rotulo { display: flex; justify-content: space-between; }
-.campo-range output { font-weight: 800; color: var(--destaque); }
-input[type="range"] { width: 100%; height: 44px; margin: 0; accent-color: var(--destaque); }
-.check {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 44px;
-  margin: 4px 0 12px;
-  font-size: 15px;
-}
-.check input { width: 22px; height: 22px; flex: 0 0 auto; accent-color: var(--destaque); }
 .linha-botoes { display: flex; flex-wrap: wrap; gap: 8px; }
 .linha-botoes .btn { flex: 1 1 auto; }
 .nota { margin: 4px 0 12px; font-size: 13px; line-height: 1.4; color: var(--texto-suave); }
 #cfg-msg:empty { display: none; }
 
-/* ---------- Rodapé: faixa da legenda + controles ---------- */
-#rodape {
-  position: fixed;
-  left: 0; right: 0; bottom: 0;
-  z-index: 5;
+/* ---------- Palco: frase original e tradução ---------- */
+#palco {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 0 var(--margem) calc(12px + var(--base-segura));
-  pointer-events: none;
-}
-#rodape > * { pointer-events: auto; }
-#faixa {
-  max-height: 40vh;
-  overflow-y: auto;
-  padding: 10px 14px 12px;
-  border-radius: 14px;
-  background: rgba(0,0,0,0.8);
-  border: 1px solid rgba(255,255,255,0.12);
+  justify-content: center;
+  padding: 16px var(--margem);
   text-align: center;
 }
+#palco > * { width: 100%; max-width: 900px; margin-left: auto; margin-right: auto; }
+#dica {
+  margin-top: 0;
+  margin-bottom: 0;
+  max-width: 520px;
+  font-size: 17px;
+  line-height: 1.45;
+  color: var(--texto-suave);
+}
+#sem-suporte {
+  max-width: 520px;
+  padding: 16px;
+  border-radius: 14px;
+  background: #3b0c10;
+  border: 2px solid var(--erro);
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.4;
+}
 #faixa-original {
-  margin-bottom: 4px;
-  font-size: 14px;
+  margin-bottom: 14px;
+  font-size: clamp(16px, 4.6vw, 24px);
   line-height: 1.35;
   color: var(--texto-suave);
   overflow-wrap: anywhere;
 }
-#faixa-personagem { color: #fff; font-weight: 800; }
 #faixa-traducao {
-  font-size: clamp(22px, 6.4vw, 42px);
-  line-height: 1.22;
+  font-size: clamp(30px, 8.6vw, 60px);
+  line-height: 1.2;
   font-weight: 800;
   color: var(--destaque);
-  text-shadow: 0 2px 4px #000;
   overflow-wrap: anywhere;
 }
 #faixa-traducao.pendente { opacity: 0.45; }
+
+/* ---------- Rodapé: seletor de personagem + controles ---------- */
+#rodape {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px var(--margem) calc(12px + var(--base-segura));
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+#seletor-titulo {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--texto-suave);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+#seletor { display: flex; gap: 8px; }
+.btn-pers {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 58px;
+  padding: 6px 4px;
+  border-radius: 12px;
+  border: 2px solid var(--borda);
+  background: #1a1a1d;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.btn-pers[aria-pressed="true"] { color: #000; }
+.btn-pers[data-p="lucia"][aria-pressed="true"] { background: var(--cor-lucia); border-color: var(--cor-lucia); }
+.btn-pers[data-p="jason"][aria-pressed="true"] { background: var(--cor-jason); border-color: var(--cor-jason); }
+.btn-pers[data-p="auto"][aria-pressed="true"] { background: var(--cor-auto); border-color: var(--cor-auto); }
 #controles { display: flex; gap: 10px; }
 </style>
 </head>
 <body>
 
-<!-- Vídeo da câmera (fundo), canvas oculto para o recorte e único <audio> para as falas -->
-<video id="video" playsinline webkit-playsinline muted autoplay></video>
-<canvas id="canvas" hidden></canvas>
+<!-- Único <audio> para as falas do ElevenLabs -->
 <audio id="audio" preload="auto"></audio>
-
-<!-- Retângulo guia: só o que estiver aqui dentro é lido pelo OCR -->
-<div id="guia" aria-hidden="true">
-  <span id="guia-rotulo">Área de leitura</span>
-  <span id="dica">Toque em Iniciar e aponte a câmera para a legenda, deixando-a dentro deste retângulo</span>
-</div>
 
 <!-- Barra superior -->
 <header id="topo">
@@ -348,10 +335,7 @@ input[type="range"] { width: 100%; height: 44px; margin: 0; accent-color: var(--
   <label class="campo">Voice ID do Jason
     <input id="cfg-jason" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="ID da voz no ElevenLabs">
   </label>
-  <label class="campo">Voice ID Padrão (narrador/outros)
-    <input id="cfg-padrao" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="ID da voz no ElevenLabs">
-  </label>
-  <p class="nota">Sem API Key (ou sem o Voice ID do personagem) o app usa a voz do próprio navegador. A chave fica salva só neste aparelho e é enviada apenas ao ElevenLabs.</p>
+  <p class="nota">Sem API Key (ou sem o Voice ID da voz escolhida) o app usa uma voz fixa do aparelho em português: mais aguda para Lucia, mais grave para Jason. O modo Auto usa o Voice ID do Jason quando ele existe. A chave fica salva só neste aparelho e é enviada apenas ao ElevenLabs.</p>
   <div class="linha-botoes">
     <button id="cfg-salvar" class="btn primario" type="button">Salvar</button>
     <button id="cfg-testar" class="btn" type="button">Testar voz</button>
@@ -360,41 +344,29 @@ input[type="range"] { width: 100%; height: 44px; margin: 0; accent-color: var(--
   <p id="cfg-msg" class="nota" aria-live="polite"></p>
 </section>
 
-<!-- Painel: tamanho da área de leitura -->
-<section id="painel-area" class="painel" hidden aria-label="Área de leitura">
-  <h2>Área de leitura</h2>
-  <label class="campo-range">
-    <span class="rotulo"><span>Largura</span><output id="out-largura">90%</output></span>
-    <input id="rng-largura" type="range" min="20" max="100" step="1" value="90">
-  </label>
-  <label class="campo-range">
-    <span class="rotulo"><span>Altura</span><output id="out-altura">18%</output></span>
-    <input id="rng-altura" type="range" min="5" max="60" step="1" value="18">
-  </label>
-  <label class="check">
-    <input id="chk-preproc" type="checkbox" checked>
-    Melhorar contraste (preto e branco) antes do OCR
-  </label>
-  <div class="linha-botoes">
-    <button id="area-fechar" class="btn" type="button">Fechar</button>
-  </div>
-</section>
-
-<!-- Rodapé: faixa da legenda traduzida e botões principais -->
-<footer id="rodape">
+<!-- Palco: última frase ouvida (inglês) e a tradução -->
+<main id="palco">
+  <div id="sem-suporte" role="alert" hidden>A escuta não é suportada neste navegador. Abra esta página no Chrome do Android.</div>
+  <p id="dica">Toque em Iniciar e deixe o celular perto do som do jogo. O app ouve as falas em inglês pelo microfone, traduz e fala em português.</p>
   <div id="faixa" hidden aria-live="polite">
-    <div id="faixa-original"><span id="faixa-personagem"></span><span id="faixa-texto-original"></span></div>
-    <div id="faixa-traducao"></div>
+    <div id="faixa-original" lang="en"></div>
+    <div id="faixa-traducao" lang="pt-BR"></div>
+  </div>
+</main>
+
+<!-- Rodapé: quem fala e botões principais -->
+<footer id="rodape">
+  <div id="seletor-titulo">Quem fala</div>
+  <div id="seletor" role="group" aria-labelledby="seletor-titulo">
+    <button class="btn-pers" type="button" data-p="lucia" aria-pressed="false">Lucia</button>
+    <button class="btn-pers" type="button" data-p="jason" aria-pressed="false">Jason</button>
+    <button class="btn-pers" type="button" data-p="auto" aria-pressed="true">Auto</button>
   </div>
   <div id="controles">
     <button id="btn-iniciar" class="btn grande iniciar" type="button">Iniciar</button>
     <button id="btn-voz" class="btn grande voz" type="button" aria-pressed="true">Voz: ON</button>
-    <button id="btn-area" class="btn grande" type="button" aria-expanded="false" aria-controls="painel-area">Área</button>
   </div>
 </footer>
-
-<!-- OCR: Tesseract.js (versão fixa) -->
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
 
 <script>
 (function () {
@@ -403,29 +375,36 @@ input[type="range"] { width: 100%; height: 44px; margin: 0; accent-color: var(--
   /* =========================================================
      1. CONSTANTES
      ========================================================= */
-  const INTERVALO_OCR_MS = 800;         // intervalo entre leituras do OCR
-  const LIMIAR_SIMILARIDADE = 0.85;     // >= isso: considera a mesma legenda
-  const HISTORICO_FRASES = 3;           // compara com as últimas N frases aceitas
-  const CONFIANCA_MINIMA = 30;          // confiança média mínima do Tesseract (0 a 100)
   const TIMEOUT_TRADUCAO_MS = 8000;     // tempo máximo de cada serviço de tradução
   const TIMEOUT_TTS_MS = 15000;         // tempo máximo da chamada ao ElevenLabs
   const MAX_CACHE_TRADUCAO = 200;       // traduções guardadas em memória
+  const MAX_FILA = 4;                   // mais que isso pendente na fila: descarta as antigas
+  const MANTER_NA_FILA = 2;             // ... e mantém só as mais recentes
+  const ATRASO_REINICIO_MS = 300;       // atraso para voltar a ouvir
+  const ESPERA_FIM_ESCUTA_MS = 700;     // espera o microfone fechar antes de falar
+  const JANELA_REPETICAO_MS = 4000;     // frase repetida dentro disso é ignorada
+  const VIGIA_ESCUTA_MS = 3000;         // de quanto em quanto tempo confere se a escuta está viva
 
-  // Prefixo de personagem: "Lucia:", "LUCIA:", "Jason:", "JASON:" (aceita também "Lúcia:")
+  const PITCH = { lucia: 1.25, jason: 0.8, auto: 1 };
+  const NOMES = { lucia: 'Lucia', jason: 'Jason', auto: 'Auto' };
+
+  // Prefixo de personagem que pode vir na tradução: "Lucia:", "Lúcia:", "JASON:"...
   const REGEX_PERSONAGEM = /^\s*(l[uú]cia|jason)\s*:\s*/i;
-  const NOMES_PERSONAGEM = { lucia: 'Lucia', jason: 'Jason' };
 
   // Chaves do localStorage
   const CHAVES = {
-    area: 'legendaAoVivo.area',
     voz: 'legendaAoVivo.vozLigada',
     config: 'legendaAoVivo.configVoz',
-    preproc: 'legendaAoVivo.preprocessar'
+    personagem: 'legendaAoVivo.personagem'
   };
 
   const URL_MYMEMORY = 'https://api.mymemory.translated.net/get';
   const URL_GOOGLE = 'https://translate.googleapis.com/translate_a/single';
   const URL_ELEVENLABS = 'https://api.elevenlabs.io/v1/text-to-speech/';
+
+  // Reconhecimento de voz do navegador (Chrome usa o prefixo webkit)
+  const Reconhecimento = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+  const MSG_SEM_SUPORTE = 'A escuta não é suportada neste navegador. Abra esta página no Chrome do Android.';
 
   /* =========================================================
      2. ARMAZENAMENTO (localStorage sempre com try/catch)
@@ -453,75 +432,72 @@ input[type="range"] { width: 100%; height: 44px; margin: 0; accent-color: var(--
      ========================================================= */
   const $ = (id) => document.getElementById(id);
   const el = {
-    video: $('video'), canvas: $('canvas'), audio: $('audio'), guia: $('guia'),
+    audio: $('audio'),
     status: $('status'), aviso: $('aviso'),
     erro: $('erro'), erroTexto: $('erro-texto'), erroFechar: $('erro-fechar'),
     btnConfig: $('btn-config'), painelVoz: $('painel-voz'),
-    cfgKey: $('cfg-key'), cfgLucia: $('cfg-lucia'), cfgJason: $('cfg-jason'), cfgPadrao: $('cfg-padrao'),
+    cfgKey: $('cfg-key'), cfgLucia: $('cfg-lucia'), cfgJason: $('cfg-jason'),
     cfgSalvar: $('cfg-salvar'), cfgTestar: $('cfg-testar'), cfgFechar: $('cfg-fechar'), cfgMsg: $('cfg-msg'),
-    painelArea: $('painel-area'), rngLargura: $('rng-largura'), rngAltura: $('rng-altura'),
-    outLargura: $('out-largura'), outAltura: $('out-altura'), chkPreproc: $('chk-preproc'),
-    areaFechar: $('area-fechar'),
-    faixa: $('faixa'), faixaPersonagem: $('faixa-personagem'),
-    faixaOriginal: $('faixa-texto-original'), faixaTraducao: $('faixa-traducao'),
-    btnIniciar: $('btn-iniciar'), btnVoz: $('btn-voz'), btnArea: $('btn-area')
+    semSuporte: $('sem-suporte'), dica: $('dica'),
+    faixa: $('faixa'), faixaOriginal: $('faixa-original'), faixaTraducao: $('faixa-traducao'),
+    seletor: $('seletor'),
+    btnIniciar: $('btn-iniciar'), btnVoz: $('btn-voz')
   };
-  const ctx = el.canvas.getContext('2d', { willReadFrequently: true });
+  const botoesPersonagem = Array.prototype.slice.call(document.querySelectorAll('.btn-pers'));
 
   /* =========================================================
      4. ESTADO DO APP
      ========================================================= */
-  function limitar(valor, min, max, padrao) {
-    const n = Number(valor);
-    if (!isFinite(n)) return padrao;
-    return Math.min(max, Math.max(min, n));
-  }
-
   function normalizarConfig(c) {
     const obj = c && typeof c === 'object' ? c : {};
     const s = (v) => (typeof v === 'string' ? v.trim() : '');
-    return { apiKey: s(obj.apiKey), vozLucia: s(obj.vozLucia), vozJason: s(obj.vozJason), vozPadrao: s(obj.vozPadrao) };
+    return { apiKey: s(obj.apiKey), vozLucia: s(obj.vozLucia), vozJason: s(obj.vozJason) };
   }
 
-  const areaSalva = lerStorage(CHAVES.area, null) || {};
+  function normalizarPersonagem(p) {
+    return p === 'lucia' || p === 'jason' ? p : 'auto';
+  }
 
   const estado = {
-    // câmera e ciclo de leitura
-    stream: null,
+    // modo de escuta (ligado pelo botão Iniciar)
     rodando: false,
-    iniciando: false,
-    tokenInicio: 0,          // invalida um "Iniciar" em andamento quando o usuário cancela
-    geracaoLoop: 0,          // evita dois loops de OCR ao parar e iniciar rápido
-    lendo: false,
-    timerOcr: null,
-    errosOcrSeguidos: 0,
-    // OCR
-    worker: null,
-    workerPromise: null,
-    // frases
-    historico: [],           // últimas frases aceitas (normalizadas)
-    seqFrase: 0,             // cada nova legenda incrementa; respostas antigas são descartadas
-    // tradução
+    statusParado: 'Pronto',
+    erroFatal: false,
+    // reconhecimento de voz
+    rec: null,               // instância atual do SpeechRecognition
+    recAtivo: false,         // start() chamado e onend ainda não veio
+    recComecou: false,       // onstart já veio nesta sessão
+    recDesde: 0,
+    escutaJaComecou: false,  // algum onstart desde o último Iniciar
+    timerReinicio: null,
+    timerVigia: null,
+    proximoAtraso: ATRASO_REINICIO_MS,
+    falhasSeguidas: 0,
+    aoFimEscuta: [],         // quem espera o microfone fechar (anti-eco)
+    ultimaFrase: null,       // { norm, em } para ignorar repetições
+    // tradução (em série, para manter a ordem das frases)
+    geracaoTraducao: 0,
+    cadeiaTraducao: Promise.resolve(),
+    pendentesTraducao: 0,
     abortTraducao: null,
-    traduzindo: false,
     cacheTraducao: new Map(),
     // voz
     vozLigada: lerStorage(CHAVES.voz, true) !== false,
     configVoz: normalizarConfig(lerStorage(CHAVES.config, {})),
+    personagem: normalizarPersonagem(lerStorage(CHAVES.personagem, 'auto')),
+    fila: [],                // frases traduzidas esperando a vez de falar
+    processandoFila: false,
+    falando: false,
+    geracaoFala: 0,          // muda só quando o usuário para a voz ou o app
     abortTts: null,
+    fimFalaAtual: null,      // encerra a fala em andamento (usado só ao parar)
     urlAudioAtual: null,
     urlSilencio: null,
     utteranceAtual: null,
-    falando: false,
     audioDesbloqueado: false,
+    pulandoAte: 0,
     // tela
-    wakeLock: null,
-    // preferências de leitura
-    area: {
-      largura: limitar(areaSalva.largura, 20, 100, 90),
-      altura: limitar(areaSalva.altura, 5, 60, 18)
-    },
-    preproc: lerStorage(CHAVES.preproc, true) !== false
+    wakeLock: null
   };
 
   /* =========================================================
@@ -540,17 +516,6 @@ input[type="range"] { width: 100%; height: 44px; margin: 0; accent-color: var(--
   // Converte qualquer erro em uma mensagem legível em português
   function mensagemDeErro(e) {
     if (!e) return 'erro desconhecido';
-    const camera = {
-      NotAllowedError: 'Permissão da câmera negada. Libere o acesso à câmera nas configurações do navegador e toque em Iniciar de novo.',
-      PermissionDeniedError: 'Permissão da câmera negada. Libere o acesso à câmera nas configurações do navegador e toque em Iniciar de novo.',
-      NotFoundError: 'Nenhuma câmera encontrada neste aparelho.',
-      DevicesNotFoundError: 'Nenhuma câmera encontrada neste aparelho.',
-      NotReadableError: 'A câmera está em uso por outro aplicativo. Feche-o e tente de novo.',
-      TrackStartError: 'A câmera está em uso por outro aplicativo. Feche-o e tente de novo.',
-      OverconstrainedError: 'A câmera não aceitou as configurações pedidas.',
-      SecurityError: 'Acesso à câmera bloqueado. A página precisa ser aberta por HTTPS.'
-    };
-    if (camera[e.name]) return camera[e.name];
     if (e.name === 'TimeoutError') return 'tempo esgotado, internet lenta?';
     if (e.name === 'TypeError' && /fetch|network|load failed/i.test(String(e.message))) {
       return 'falha de rede: sem internet ou serviço bloqueado';
@@ -584,20 +549,50 @@ input[type="range"] { width: 100%; height: 44px; margin: 0; accent-color: var(--
     }
   }
 
+  function limparTexto(t) {
+    return String(t).replace(/\s+/g, ' ').trim();
+  }
+
+  // Normaliza para comparar: minúsculas, sem acentos, sem pontuação, espaços colapsados
+  function normalizar(t) {
+    return String(t)
+      .toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9'\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function temLetrasSuficientes(t) {
+    return normalizar(t).replace(/[^a-z]/g, '').length >= 2;
+  }
+
+  // Remove "Lucia:" / "Jason:" do começo (e traços de diálogo), se houver
+  function removerPrefixo(t) {
+    return String(t).replace(/^[\s\-–—•]+/, '').replace(REGEX_PERSONAGEM, '').trim();
+  }
+
   /* =========================================================
-     6. INTERFACE: status, erros, avisos, painéis e faixa
+     6. INTERFACE: status, erros, avisos, painel e faixa
      ========================================================= */
   function setStatus(texto, tipo) {
     el.status.textContent = texto;
     el.status.setAttribute('data-tipo', tipo || '');
   }
 
-  // Durante a execução o status mostra a etapa mais relevante
-  function atualizarStatusExecucao() {
-    if (!estado.rodando) return;
-    if (estado.traduzindo) setStatus('Traduzindo...', 'carregando');
-    else if (estado.falando) setStatus('Falando...', 'ok');
-    else setStatus('Lendo...', 'ok');
+  // Status simples: Ouvindo... / Traduzindo... / Falando (fila: N)
+  function atualizarStatus() {
+    if (Date.now() < estado.pulandoAte) {
+      setStatus('Pulando falas atrasadas', 'carregando');
+    } else if (estado.falando) {
+      setStatus('Falando (fila: ' + estado.fila.length + ')', 'falando');
+    } else if (estado.pendentesTraducao > 0) {
+      setStatus('Traduzindo...', 'carregando');
+    } else if (estado.rodando) {
+      setStatus('Ouvindo...', 'ok');
+    } else {
+      setStatus(estado.statusParado, estado.statusParado === 'Erro' ? 'erro' : '');
+    }
   }
 
   let timerErro = null;
@@ -620,14 +615,10 @@ input[type="range"] { width: 100%; height: 44px; margin: 0; accent-color: var(--
     timerAviso = setTimeout(() => { el.aviso.hidden = true; }, ms || 9000);
   }
 
-  function abrirPainel(qual) {   // 'voz', 'area' ou null (fecha os dois)
-    const vozAberto = qual === 'voz';
-    const areaAberta = qual === 'area';
-    el.painelVoz.hidden = !vozAberto;
-    el.painelArea.hidden = !areaAberta;
-    el.btnConfig.setAttribute('aria-expanded', String(vozAberto));
-    el.btnArea.setAttribute('aria-expanded', String(areaAberta));
-    if (vozAberto) {
+  function abrirPainel(aberto) {
+    el.painelVoz.hidden = !aberto;
+    el.btnConfig.setAttribute('aria-expanded', String(!!aberto));
+    if (aberto) {
       preencherFormulario();
       el.cfgMsg.textContent = '';
     }
@@ -635,10 +626,7 @@ input[type="range"] { width: 100%; height: 44px; margin: 0; accent-color: var(--
 
   function atualizarBotaoIniciar() {
     const b = el.btnIniciar;
-    if (estado.iniciando) {
-      b.textContent = 'Cancelar';
-      b.className = 'btn grande parar';
-    } else if (estado.rodando) {
+    if (estado.rodando) {
       b.textContent = 'Parar';
       b.className = 'btn grande parar';
     } else {
@@ -653,9 +641,15 @@ input[type="range"] { width: 100%; height: 44px; margin: 0; accent-color: var(--
     el.btnVoz.classList.toggle('desligada', !estado.vozLigada);
   }
 
-  function mostrarOriginal(personagem, texto) {
+  function atualizarSeletor() {
+    botoesPersonagem.forEach((b) => {
+      b.setAttribute('aria-pressed', String(b.getAttribute('data-p') === estado.personagem));
+    });
+  }
+
+  function mostrarOriginal(texto) {
+    el.dica.hidden = true;
     el.faixa.hidden = false;
-    el.faixaPersonagem.textContent = personagem ? NOMES_PERSONAGEM[personagem] + ': ' : '';
     el.faixaOriginal.textContent = texto;
   }
 
@@ -671,331 +665,223 @@ input[type="range"] { width: 100%; height: 44px; margin: 0; accent-color: var(--
   }
 
   /* =========================================================
-     7. ÁREA DE LEITURA (retângulo guia)
+     7. ESCUTA (Web Speech API: SpeechRecognition)
      ========================================================= */
-  function aplicarArea() {
-    el.guia.style.width = estado.area.largura + '%';
-    el.guia.style.height = estado.area.altura + '%';
-    el.outLargura.textContent = estado.area.largura + '%';
-    el.outAltura.textContent = estado.area.altura + '%';
+  function agendarReinicio(ms) {
+    if (!estado.rodando || estado.erroFatal) return;
+    clearTimeout(estado.timerReinicio);
+    estado.timerReinicio = setTimeout(() => {
+      estado.timerReinicio = null;
+      iniciarReconhecimento();
+    }, ms);
   }
 
-  function salvarArea() {
-    gravarStorage(CHAVES.area, estado.area);
+  function liberarEsperasEscuta() {
+    const esperas = estado.aoFimEscuta.splice(0);
+    esperas.forEach((f) => { try { f(); } catch (e) { /* ignora */ } });
   }
 
-  // Mapeia o retângulo da tela para o tamanho real do vídeo (object-fit: cover)
-  function calcularRecorte() {
-    const vw = el.video.videoWidth;
-    const vh = el.video.videoHeight;
-    if (!vw || !vh) return null;
-    const rv = el.video.getBoundingClientRect();
-    const rg = el.guia.getBoundingClientRect();
-    if (!rv.width || !rv.height) return null;
+  // Liga o microfone. Não faz nada se o app estiver falando (anti-eco).
+  function iniciarReconhecimento() {
+    if (!Reconhecimento || !estado.rodando || estado.erroFatal) return;
+    if (estado.falando || estado.recAtivo || document.hidden) return;
+    clearTimeout(estado.timerReinicio);
+    estado.timerReinicio = null;
 
-    // Com "cover" o vídeo é ampliado pelo MAIOR fator e o excesso é cortado nas bordas
-    const escala = Math.max(rv.width / vw, rv.height / vh);
-    const offX = (rv.width - vw * escala) / 2;   // negativo quando sobra vídeo na lateral
-    const offY = (rv.height - vh * escala) / 2;
+    const rec = new Reconhecimento();
+    rec.lang = 'en-US';
+    rec.continuous = true;
+    rec.interimResults = false;       // só frases finais
+    rec.maxAlternatives = 1;
 
-    let x1 = (rg.left - rv.left - offX) / escala;
-    let y1 = (rg.top - rv.top - offY) / escala;
-    let x2 = (rg.right - rv.left - offX) / escala;
-    let y2 = (rg.bottom - rv.top - offY) / escala;
-    x1 = Math.max(0, x1); y1 = Math.max(0, y1);
-    x2 = Math.min(vw, x2); y2 = Math.min(vh, y2);
+    rec.onstart = () => {
+      if (rec !== estado.rec) return;
+      estado.recComecou = true;
+      estado.escutaJaComecou = true;
+      atualizarStatus();
+    };
 
-    const sw = x2 - x1;
-    const sh = y2 - y1;
-    if (sw < 8 || sh < 8) return null;
-    return { sx: x1, sy: y1, sw: sw, sh: sh };
-  }
-
-  /* =========================================================
-     8. PRÉ-PROCESSAMENTO DA IMAGEM (cinza + limiar de Otsu)
-     ========================================================= */
-  function limiarOtsu(hist, total) {
-    let soma = 0;
-    for (let i = 0; i < 256; i++) soma += i * hist[i];
-    let somaFundo = 0, pesoFundo = 0, melhor = 0, limiar = 127;
-    for (let t = 0; t < 256; t++) {
-      pesoFundo += hist[t];
-      if (pesoFundo === 0) continue;
-      const pesoFrente = total - pesoFundo;
-      if (pesoFrente === 0) break;
-      somaFundo += t * hist[t];
-      const mediaFundo = somaFundo / pesoFundo;
-      const mediaFrente = (soma - somaFundo) / pesoFrente;
-      const variancia = pesoFundo * pesoFrente * (mediaFundo - mediaFrente) * (mediaFundo - mediaFrente);
-      if (variancia > melhor) { melhor = variancia; limiar = t; }
-    }
-    return limiar;
-  }
-
-  // Converte para preto e branco. O texto (que costuma ser a minoria dos pixels)
-  // vira preto sobre branco, que é o formato preferido do Tesseract.
-  function preprocessar(contexto, w, h) {
-    const img = contexto.getImageData(0, 0, w, h);
-    const d = img.data;
-    const total = w * h;
-    const cinza = new Uint8Array(total);
-    const hist = new Uint32Array(256);
-    for (let p = 0, i = 0; p < total; p++, i += 4) {
-      const g = ((d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000) | 0;
-      cinza[p] = g;
-      hist[g]++;
-    }
-    const lim = limiarOtsu(hist, total);
-    let claros = 0;
-    for (let g = lim + 1; g < 256; g++) claros += hist[g];
-    const textoClaro = claros < total / 2;   // legenda branca sobre fundo escuro
-    for (let p = 0, i = 0; p < total; p++, i += 4) {
-      let v = cinza[p] > lim ? 255 : 0;
-      if (textoClaro) v = 255 - v;
-      d[i] = d[i + 1] = d[i + 2] = v;
-      d[i + 3] = 255;
-    }
-    contexto.putImageData(img, 0, 0);
-  }
-
-  /* =========================================================
-     9. CÂMERA
-     ========================================================= */
-  async function abrirCamera() {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      throw criarErro('SemSuporte', 'Este navegador não permite acessar a câmera. Use o Chrome (Android) ou o Safari (iOS) e abra a página por HTTPS.');
-    }
-    let stream;
-    try {
-      // Pede câmera traseira; a resolução é só "ideal" (ajuda o OCR quando disponível)
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
-        audio: false
-      });
-    } catch (e) {
-      if (e && (e.name === 'OverconstrainedError' || e.name === 'ConstraintNotSatisfiedError')) {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
-      } else {
-        throw e;
+    // Resultados que chegam logo depois de um stop() ainda são falas do jogo: aceita
+    rec.onresult = (ev) => {
+      const lista = ev.results;
+      for (let i = ev.resultIndex || 0; i < lista.length; i++) {
+        const r = lista[i];
+        if (!r || !r.isFinal || !r[0]) continue;
+        receberFrase(r[0].transcript || '');
       }
+    };
+
+    rec.onerror = (ev) => {
+      if (rec !== estado.rec) return;
+      tratarErroEscuta(ev && ev.error);
+    };
+
+    rec.onend = () => {
+      if (rec !== estado.rec) return;
+      estado.recAtivo = false;
+      estado.recComecou = false;
+      liberarEsperasEscuta();
+      const atraso = estado.proximoAtraso;
+      estado.proximoAtraso = ATRASO_REINICIO_MS;
+      // Não deixa a escuta morrer: se o modo está ligado e não está falando, reinicia
+      if (estado.rodando && !estado.falando && !estado.erroFatal && !document.hidden) {
+        agendarReinicio(atraso);
+      }
+    };
+
+    estado.rec = rec;
+    estado.recAtivo = true;
+    estado.recComecou = false;
+    estado.recDesde = Date.now();
+    try {
+      rec.start();
+    } catch (e) {
+      console.warn('Falha ao iniciar a escuta:', e);
+      estado.rec = null;
+      estado.recAtivo = false;
+      agendarReinicio(1000);
     }
-    return stream;
   }
 
-  function ligarVideo(stream) {
-    el.video.muted = true;
-    el.video.srcObject = stream;
-    // Se a câmera cair (outro app, permissão revogada), para tudo e avisa
-    const trilha = stream.getVideoTracks()[0];
-    if (trilha) {
-      trilha.addEventListener('ended', () => {
-        if (estado.stream !== stream) return;
-        parar('Erro');
-        mostrarErro('A câmera foi desligada ou tomada por outro aplicativo. Toque em Iniciar para reabrir.');
-      });
-    }
+  // Anti-eco: fecha o microfone (stop) e espera ele fechar antes de falar
+  function pararEscutaEAguardar() {
+    clearTimeout(estado.timerReinicio);
+    estado.timerReinicio = null;
+    const rec = estado.rec;
+    if (!rec || !estado.recAtivo) return Promise.resolve();
     return new Promise((resolve) => {
+      let feito = false;
       const pronto = () => {
-        const p = el.video.play();
-        if (p && p.catch) p.catch(() => {});
+        if (feito) return;
+        feito = true;
+        clearTimeout(limite);
         resolve();
       };
-      if (el.video.readyState >= 1 && el.video.videoWidth) pronto();
-      else {
-        el.video.addEventListener('loadedmetadata', pronto, { once: true });
-        setTimeout(resolve, 5000);   // não trava o início se o evento não vier
-      }
+      const limite = setTimeout(pronto, ESPERA_FIM_ESCUTA_MS);
+      estado.aoFimEscuta.push(pronto);
+      try { rec.stop(); } catch (e) { pronto(); }
     });
   }
 
-  function pararStream(stream) {
-    if (!stream) return;
-    stream.getTracks().forEach((t) => { try { t.stop(); } catch (e) { /* ignora */ } });
-  }
-
-  /* =========================================================
-     10. OCR (Tesseract.js): worker único e reutilizado
-     ========================================================= */
-  function descreverProgressoOcr(m) {
-    if (!m || !m.status) return null;
-    const s = String(m.status);
-    let nome = null;
-    if (s.indexOf('loading tesseract core') === 0) nome = 'Carregando OCR';
-    else if (s.indexOf('initializing tesseract') === 0) nome = 'Iniciando OCR';
-    else if (s.indexOf('loading language traineddata') === 0) nome = 'Baixando idioma inglês';
-    else if (s.indexOf('initializing api') === 0) nome = 'Preparando OCR';
-    if (!nome) return null;
-    const pct = typeof m.progress === 'number' ? Math.round(m.progress * 100) : null;
-    return nome + '...' + (pct !== null && pct > 0 && pct < 100 ? ' ' + pct + '%' : '');
-  }
-
-  function garantirWorker() {
-    if (estado.worker) return Promise.resolve(estado.worker);
-    if (estado.workerPromise) return estado.workerPromise;
-    const T = window.Tesseract;
-    if (!T || typeof T.createWorker !== 'function') {
-      return Promise.reject(criarErro('OcrIndisponivel', 'Não foi possível carregar o Tesseract.js. Verifique a internet e recarregue a página.'));
-    }
-    estado.workerPromise = (async () => {
-      try {
-        const w = await T.createWorker('eng', 1, {
-          logger: (m) => {
-            if (!estado.iniciando) return;
-            const s = descreverProgressoOcr(m);
-            if (s) setStatus(s, 'carregando');
-          }
-        });
-        // PSM 6 = bloco único de texto (bom para legendas de 1 ou 2 linhas)
-        await w.setParameters({
-          tessedit_pageseg_mode: (T.PSM && T.PSM.SINGLE_BLOCK) || '6',
-          preserve_interword_spaces: '1'
-        });
-        estado.worker = w;
-        return w;
-      } catch (e) {
-        estado.workerPromise = null;
-        throw criarErro('OcrIndisponivel', 'Falha ao carregar o OCR: ' + mensagemDeErro(e) + '. Verifique a internet.');
+  // Desliga a escuta de vez (Parar / Voz OFF)
+  function encerrarEscuta() {
+    clearTimeout(estado.timerReinicio);
+    estado.timerReinicio = null;
+    clearInterval(estado.timerVigia);
+    estado.timerVigia = null;
+    const rec = estado.rec;
+    estado.rec = null;
+    estado.recAtivo = false;
+    estado.recComecou = false;
+    if (rec) {
+      try { rec.abort(); } catch (e) {
+        try { rec.stop(); } catch (e2) { /* ignora */ }
       }
-    })();
-    return estado.workerPromise;
+    }
+    liberarEsperasEscuta();
   }
 
-  // Desenha só o recorte do retângulo no canvas oculto e lê o texto
-  async function lerRegiao() {
-    if (document.hidden || !estado.worker) return null;
-    const r = calcularRecorte();
-    if (!r) return null;
-    // Amplia recortes pequenos (OCR gosta de letras maiores) e reduz os enormes (desempenho)
-    const escala = r.sw < 1000 ? Math.min(2.5, 1000 / r.sw) : Math.min(1, 1600 / r.sw);
-    const w = Math.max(1, Math.round(r.sw * escala));
-    const h = Math.max(1, Math.round(r.sh * escala));
-    if (el.canvas.width !== w) el.canvas.width = w;
-    if (el.canvas.height !== h) el.canvas.height = h;
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(el.video, r.sx, r.sy, r.sw, r.sh, 0, 0, w, h);
-    if (estado.preproc) preprocessar(ctx, w, h);
-    const res = await estado.worker.recognize(el.canvas);
-    const data = res && res.data ? res.data : {};
-    return {
-      texto: data.text || '',
-      confianca: typeof data.confidence === 'number' ? data.confidence : 100
-    };
+  function falhaFatal(msg) {
+    estado.erroFatal = true;
+    parar('Erro');
+    mostrarErro(msg);
   }
 
-  // Loop sem sobreposição: a próxima leitura só começa quando a anterior termina
-  async function cicloOcr(ger) {
-    if (!estado.rodando || ger !== estado.geracaoLoop) return;
-    if (estado.lendo) {   // uma leitura antiga ainda está terminando
-      estado.timerOcr = setTimeout(() => cicloOcr(ger), 100);
+  function tratarErroEscuta(codigo) {
+    switch (codigo) {
+      case 'no-speech':
+      case 'aborted':
+        // Normais (silêncio ou sessão interrompida): o onend reinicia com pequeno atraso
+        estado.proximoAtraso = ATRASO_REINICIO_MS;
+        return;
+      case 'not-allowed':
+        falhaFatal('Permissão do microfone negada. Libere o microfone para este site nas configurações do navegador e toque em Iniciar de novo.');
+        return;
+      case 'service-not-allowed':
+        falhaFatal('O navegador bloqueou o reconhecimento de voz. Use o Chrome no Android e libere o microfone para este site.');
+        return;
+      case 'language-not-supported':
+        falhaFatal('Este navegador não reconhece inglês (en-US). Use o Chrome no Android.');
+        return;
+      case 'audio-capture':
+        estado.falhasSeguidas++;
+        if (estado.falhasSeguidas >= 5) {
+          falhaFatal('Não foi possível usar o microfone (está em uso por outro app?). Feche o outro app e toque em Iniciar.');
+          return;
+        }
+        mostrarErro('Microfone indisponível no momento. Tentando de novo...', true);
+        break;
+      case 'network':
+        estado.falhasSeguidas++;
+        mostrarErro('Sem internet para o reconhecimento de voz. Tentando de novo...', true);
+        break;
+      default:
+        estado.falhasSeguidas++;
+        console.warn('Erro na escuta:', codigo);
+    }
+    estado.proximoAtraso = Math.min(5000, ATRASO_REINICIO_MS + 500 * estado.falhasSeguidas);
+  }
+
+  // Vigia: garante que a escuta não fique parada sem motivo
+  function vigiarEscuta() {
+    if (!estado.rodando || estado.erroFatal || estado.falando || document.hidden) return;
+    if (estado.recAtivo) {
+      // start() que nunca respondeu (acontece em alguns Androids): descarta e tenta de novo
+      if (estado.escutaJaComecou && !estado.recComecou && Date.now() - estado.recDesde > 10000) {
+        const rec = estado.rec;
+        estado.rec = null;
+        estado.recAtivo = false;
+        if (rec) { try { rec.abort(); } catch (e) { /* ignora */ } }
+        agendarReinicio(ATRASO_REINICIO_MS);
+      }
       return;
     }
-    estado.lendo = true;
-    const inicio = performance.now();
-    try {
-      const leitura = await lerRegiao();
-      if (leitura && estado.rodando && ger === estado.geracaoLoop) {
-        avaliarLeitura(leitura.texto, leitura.confianca);
+    if (!estado.timerReinicio) iniciarReconhecimento();
+  }
+
+  // Uma frase final reconhecida: limpa, filtra repetições e manda traduzir
+  function receberFrase(bruto) {
+    if (!estado.rodando) return;
+    let texto = removerPrefixo(limparTexto(bruto));
+    if (!texto || !temLetrasSuficientes(texto)) return;
+
+    const norm = normalizar(texto);
+    const agora = Date.now();
+    const ultima = estado.ultimaFrase;
+    estado.ultimaFrase = { norm: norm, em: agora };
+    if (ultima && agora - ultima.em < JANELA_REPETICAO_MS) {
+      if (norm === ultima.norm) return;   // repetida (bug do modo contínuo no Android)
+      // Às vezes a frase vem acumulada ("frase anterior + nova"): fica só com a parte nova
+      if (ultima.norm.length >= 8 && norm.indexOf(ultima.norm + ' ') === 0) {
+        const palavras = texto.split(' ');
+        const n = ultima.norm.split(' ').length;
+        if (normalizar(palavras.slice(0, n).join(' ')) === ultima.norm) {
+          texto = palavras.slice(n).join(' ').trim();
+          if (!texto || !temLetrasSuficientes(texto)) return;
+        }
       }
-      estado.errosOcrSeguidos = 0;
-    } catch (e) {
-      estado.errosOcrSeguidos++;
-      console.warn('Falha no OCR:', e);
-      if (estado.errosOcrSeguidos === 5) mostrarErro('O OCR está falhando: ' + mensagemDeErro(e), true);
-    } finally {
-      estado.lendo = false;
     }
-    if (!estado.rodando || ger !== estado.geracaoLoop) return;
-    const gasto = performance.now() - inicio;
-    estado.timerOcr = setTimeout(() => cicloOcr(ger), Math.max(30, INTERVALO_OCR_MS - gasto));
+
+    estado.falhasSeguidas = 0;
+    // A voz escolhida no seletor vale a partir desta frase
+    const item = { original: texto, personagem: estado.personagem };
+    const ger = estado.geracaoTraducao;
+    estado.pendentesTraducao++;
+    atualizarStatus();
+    estado.cadeiaTraducao = estado.cadeiaTraducao
+      .then(() => traduzirItem(item, ger))
+      .catch((e) => console.warn('Falha ao processar frase:', e))
+      .then(() => {
+        if (ger !== estado.geracaoTraducao) return;
+        estado.pendentesTraducao = Math.max(0, estado.pendentesTraducao - 1);
+        atualizarStatus();
+      });
   }
 
   /* =========================================================
-     11. FILTRO DE TEXTO E SIMILARIDADE
+     8. TRADUÇÃO (MyMemory, com fallback no Google GTX)
      ========================================================= */
-  // Limpa o texto bruto do OCR (quebras de linha e símbolos que costumam ser ruído)
-  function limparTextoOcr(t) {
-    return String(t)
-      .replace(/[\r\n]+/g, ' ')
-      .replace(/[|_~`^*<>{}\[\]\\=«»]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-  }
-
-  // Normaliza para comparar: minúsculas, sem acentos, sem pontuação, espaços colapsados
-  function normalizar(t) {
-    return String(t)
-      .toLowerCase()
-      .normalize('NFD').replace(/[̀-ͯ]/g, '')
-      .replace(/[^a-z0-9'\s]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-  }
-
-  // Distância de Levenshtein (duas linhas de memória)
-  function levenshtein(a, b) {
-    if (a === b) return 0;
-    if (!a.length) return b.length;
-    if (!b.length) return a.length;
-    let anterior = new Array(b.length + 1);
-    let atual = new Array(b.length + 1);
-    for (let j = 0; j <= b.length; j++) anterior[j] = j;
-    for (let i = 1; i <= a.length; i++) {
-      atual[0] = i;
-      const ca = a.charCodeAt(i - 1);
-      for (let j = 1; j <= b.length; j++) {
-        const custo = ca === b.charCodeAt(j - 1) ? 0 : 1;
-        atual[j] = Math.min(anterior[j] + 1, atual[j - 1] + 1, anterior[j - 1] + custo);
-      }
-      const troca = anterior; anterior = atual; atual = troca;
-    }
-    return anterior[b.length];
-  }
-
-  // Similaridade de 0 a 1 (1 = idêntico)
-  function similaridade(a, b) {
-    const maior = Math.max(a.length, b.length);
-    return maior === 0 ? 1 : 1 - levenshtein(a, b) / maior;
-  }
-
-  // Decide se a leitura é uma frase nova
-  function avaliarLeitura(textoBruto, confianca) {
-    const limpo = limparTextoOcr(textoBruto);
-    const norm = normalizar(limpo);
-    if (norm.length < 3) return;                                  // curta demais
-    const letras = (norm.match(/[a-z]/g) || []).length;
-    const semEspacos = norm.replace(/\s/g, '').length;
-    if (letras === 0 || letras / semEspacos < 0.5) return;         // sem letras ou só ruído
-    if (confianca < CONFIANCA_MINIMA) return;                      // leitura duvidosa
-
-    // Mesma legenda (ou erro pequeno) que alguma das últimas aceitas: ignora
-    for (let i = 0; i < estado.historico.length; i++) {
-      if (similaridade(norm, estado.historico[i]) >= LIMIAR_SIMILARIDADE) return;
-    }
-    // Leitura parcial (só um pedaço da última legenda): ignora
-    const ultima = estado.historico[0];
-    if (ultima && norm.length >= 6 && (' ' + ultima + ' ').indexOf(' ' + norm + ' ') !== -1) return;
-
-    estado.historico.unshift(norm);
-    if (estado.historico.length > HISTORICO_FRASES) estado.historico.length = HISTORICO_FRASES;
-    processarFrase(limpo);
-  }
-
-  /* =========================================================
-     12. PERSONAGEM (prefixo "Lucia:" / "Jason:")
-     ========================================================= */
-  function separarPersonagem(texto) {
-    const semTraco = texto.replace(/^[\s\-–—•]+/, '');   // legendas de diálogo começam com "-"
-    const m = semTraco.match(REGEX_PERSONAGEM);
-    if (!m) return { personagem: null, texto: semTraco.trim() };
-    const nome = m[1].toLowerCase().replace('ú', 'u');
-    return { personagem: nome, texto: semTraco.slice(m[0].length).trim() };
-  }
-
-  /* =========================================================
-     13. TRADUÇÃO (MyMemory, com fallback no Google GTX)
-     ========================================================= */
-  // Legendas em CAIXA ALTA traduzem mal; converte para frase normal antes
+  // Texto em CAIXA ALTA traduz mal; converte para frase normal antes
   function ajustarCaixa(texto) {
     if (!/[A-Z]/.test(texto) || /[a-z]/.test(texto)) return texto;
     let t = texto.toLowerCase();
@@ -1046,7 +932,7 @@ input[type="range"] { width: 100%; height: 44px; margin: 0; accent-color: var(--
     return t;
   }
 
-  async function traduzir(texto, seq) {
+  async function traduzir(texto, ger) {
     const entrada = ajustarCaixa(texto);
     const chave = entrada.toLowerCase();
     if (estado.cacheTraducao.has(chave)) return estado.cacheTraducao.get(chave);
@@ -1055,9 +941,9 @@ input[type="range"] { width: 100%; height: 44px; margin: 0; accent-color: var(--
     try {
       resultado = await traduzirMyMemory(entrada, novoControleTraducao());
     } catch (e) {
-      if (e && e.name === 'AbortError') throw e;          // chegou legenda mais nova
+      if (e && e.name === 'AbortError') throw e;          // o usuário parou o app
       console.warn('MyMemory falhou, tentando Google:', e);
-      if (seq !== estado.seqFrase) throw erroAbort();
+      if (ger !== estado.geracaoTraducao) throw erroAbort();
       resultado = await traduzirGoogle(entrada, novoControleTraducao());
     }
 
@@ -1068,54 +954,33 @@ input[type="range"] { width: 100%; height: 44px; margin: 0; accent-color: var(--
     return resultado;
   }
 
-  // Fluxo de uma frase nova: personagem -> tradução -> exibição -> voz
-  async function processarFrase(textoLimpo) {
-    const partes = separarPersonagem(textoLimpo);
-    const personagem = partes.personagem;
-    const texto = partes.texto;
-    if (normalizar(texto).replace(/[^a-z]/g, '').length < 2) return;   // só o nome, sem fala
-
-    const seq = ++estado.seqFrase;
-    pararFala();             // só a fala mais recente toca
-    cancelarTraducao();      // tradução antiga não interessa mais
-    mostrarOriginal(personagem, texto);
+  // Fluxo de uma frase: exibe o original -> traduz -> exibe a tradução -> entra na fila de fala
+  async function traduzirItem(item, ger) {
+    if (ger !== estado.geracaoTraducao) return;
+    mostrarOriginal(item.original);
     marcarTraducaoPendente();
-    estado.traduzindo = true;
-    atualizarStatusExecucao();
 
     let traducao = null;
     try {
-      traducao = await traduzir(texto, seq);   // traduz SEM o prefixo do personagem
+      traducao = await traduzir(item.original, ger);
     } catch (e) {
-      if (seq !== estado.seqFrase || (e && e.name === 'AbortError')) return;
+      if (ger !== estado.geracaoTraducao || (e && e.name === 'AbortError')) return;
       console.warn('Tradução falhou:', e);
       mostrarErro('Falha na tradução: ' + mensagemDeErro(e), true);
     }
-    if (seq !== estado.seqFrase) return;
+    if (ger !== estado.geracaoTraducao) return;
 
-    estado.traduzindo = false;
+    traducao = traducao ? removerPrefixo(traducao) : '';
     if (!traducao) {
       mostrarTraducao('(tradução indisponível)', false);
-      atualizarStatusExecucao();
       return;
     }
     mostrarTraducao(traducao, false);
-    atualizarStatusExecucao();
-    if (estado.vozLigada) {
-      falar(traducao, personagem, seq, null).catch((e) => console.warn('Falha na voz:', e));
-    }
-  }
-
-  // Invalida a frase em andamento (usado ao parar e no teste de voz)
-  function invalidarFraseAtual() {
-    estado.seqFrase++;
-    cancelarTraducao();
-    estado.traduzindo = false;
-    return estado.seqFrase;
+    if (estado.vozLigada) enfileirar({ texto: traducao, personagem: item.personagem });
   }
 
   /* =========================================================
-     14. VOZ: ElevenLabs com fallback no speechSynthesis
+     9. VOZ: ElevenLabs com queda para a voz do aparelho
      ========================================================= */
   // WAV silencioso de 0,1 s, criado em código, usado para "desbloquear" o <audio>
   function criarWavSilencioso() {
@@ -1144,7 +1009,7 @@ input[type="range"] { width: 100%; height: 44px; margin: 0; accent-color: var(--
     } catch (e) { /* ignora */ }
     try {
       if ('speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined' &&
-          !window.speechSynthesis.speaking) {
+          !window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
         const u = new SpeechSynthesisUtterance(' ');
         u.volume = 0;
         u.lang = 'pt-BR';
@@ -1164,131 +1029,243 @@ input[type="range"] { width: 100%; height: 44px; margin: 0; accent-color: var(--
     try { URL.revokeObjectURL(url); } catch (e) { /* ignora */ }
   }
 
-  // Cancela tudo o que estiver falando ou sendo gerado (sem fila)
+  // Para a fila e a fala atual. Só é chamado quando o usuário desliga a voz ou toca em Parar.
   function pararFala() {
+    estado.geracaoFala++;
+    estado.fila = [];
+    estado.pulandoAte = 0;
     if (estado.abortTts) {
       try { estado.abortTts.abort(); } catch (e) { /* ignora */ }
       estado.abortTts = null;
     }
+    const encerrar = estado.fimFalaAtual;
+    estado.fimFalaAtual = null;
+    if (encerrar) { try { encerrar(); } catch (e) { /* ignora */ } }
     liberarAudioAtual();
     if ('speechSynthesis' in window) {
       try { window.speechSynthesis.cancel(); } catch (e) { /* ignora */ }
     }
     estado.utteranceAtual = null;
     estado.falando = false;
+    estado.processandoFila = false;
+    if (estado.rodando) agendarReinicio(ATRASO_REINICIO_MS);
   }
 
-  // Vozes do navegador (a lista pode chegar depois, pelo evento voiceschanged)
-  let vozesNavegador = [];
+  // Voz do aparelho: sempre a MESMA (a primeira pt-BR encontrada); a lista pode chegar depois
+  let vozesAparelho = [];
+  let uriVozFixa = null;
   function carregarVozes() {
-    try { vozesNavegador = window.speechSynthesis.getVoices() || []; } catch (e) { vozesNavegador = []; }
+    try { vozesAparelho = window.speechSynthesis.getVoices() || []; } catch (e) { vozesAparelho = []; }
   }
-  function escolherVozPtBr() {
-    if (!vozesNavegador.length) carregarVozes();
+  function vozFixaDoAparelho() {
+    if (!vozesAparelho.length) carregarVozes();
+    if (uriVozFixa) {
+      const mesma = vozesAparelho.find((v) => v.voiceURI === uriVozFixa);
+      if (mesma) return mesma;
+    }
     const lang = (v) => String(v.lang || '').replace('_', '-').toLowerCase();
-    return vozesNavegador.find((v) => lang(v) === 'pt-br') ||
-           vozesNavegador.find((v) => lang(v).indexOf('pt') === 0) || null;
+    const voz = vozesAparelho.find((v) => lang(v) === 'pt-br') ||
+                vozesAparelho.find((v) => lang(v).indexOf('pt') === 0) || null;
+    if (voz && !uriVozFixa) uriVozFixa = voz.voiceURI;
+    return voz;
   }
 
-  // Fallback: voz do navegador. Tom diferente por personagem para distinguir as falas.
-  function falarNavegador(texto, personagem, seq) {
+  // Fala com a voz do aparelho e só resolve quando a fala TERMINA
+  function falarAparelho(texto, personagem) {
     if (!('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') {
       mostrarAviso('Este navegador não tem síntese de voz.');
-      return false;
+      return Promise.resolve(false);
     }
     const synth = window.speechSynthesis;
-    const u = new SpeechSynthesisUtterance(texto);
-    u.lang = 'pt-BR';
-    const voz = escolherVozPtBr();
-    if (voz) u.voice = voz;
-    u.rate = 1.05;
-    u.pitch = personagem === 'lucia' ? 1.25 : (personagem === 'jason' ? 0.8 : 1);
-    u.onstart = () => {
-      if (seq === estado.seqFrase) { estado.falando = true; atualizarStatusExecucao(); }
-    };
-    u.onend = u.onerror = () => {
-      if (seq === estado.seqFrase) { estado.falando = false; atualizarStatusExecucao(); }
-    };
-    estado.utteranceAtual = u;   // mantém referência (evita o Chrome descartar o objeto)
-    const ocupado = synth.speaking || synth.pending;
-    synth.cancel();
-    // Alguns Androids ignoram um speak() logo após o cancel(); um pequeno atraso resolve
-    if (ocupado) setTimeout(() => { if (seq === estado.seqFrase) synth.speak(u); }, 80);
-    else synth.speak(u);
-    return true;
+    return new Promise((resolve) => {
+      const u = new SpeechSynthesisUtterance(texto);
+      u.lang = 'pt-BR';
+      const voz = vozFixaDoAparelho();
+      if (voz) u.voice = voz;
+      u.rate = 1.05;
+      u.pitch = PITCH[personagem] || 1;
+
+      const inicio = Date.now();
+      const minimo = 1500 + texto.length * 50;     // antes disso não confia só no "speaking"
+      let terminou = false;
+      // Alguns Androids não disparam onend: confere se o sintetizador ficou livre
+      const vigia = setInterval(() => {
+        if (!synth.speaking && !synth.pending && Date.now() - inicio > minimo) fim();
+      }, 500);
+      const limite = setTimeout(fim, 10000 + texto.length * 200);
+      function fim() {
+        if (terminou) return;
+        terminou = true;
+        clearInterval(vigia);
+        clearTimeout(limite);
+        if (estado.fimFalaAtual === fim) estado.fimFalaAtual = null;
+        if (estado.utteranceAtual === u) estado.utteranceAtual = null;
+        resolve(true);
+      }
+      u.onend = fim;
+      u.onerror = fim;
+      estado.fimFalaAtual = fim;
+      estado.utteranceAtual = u;   // mantém referência (evita o Chrome descartar o objeto)
+      try { synth.speak(u); } catch (e) { fim(); }
+    });
   }
 
-  async function falarElevenLabs(texto, voiceId, apiKey, seq) {
+  // Toca o áudio do ElevenLabs e só resolve quando ele TERMINA
+  function tocarAudio(url) {
+    return new Promise((resolve, reject) => {
+      const audio = el.audio;
+      let comecou = false;
+      let terminou = false;
+      let vigia = null;
+      function fim(erro) {
+        if (terminou) return;
+        terminou = true;
+        clearInterval(vigia);
+        audio.removeEventListener('ended', aoTerminar);
+        audio.removeEventListener('error', aoErro);
+        if (estado.fimFalaAtual === cancelar) estado.fimFalaAtual = null;
+        liberarAudioAtual();
+        if (erro) reject(erro); else resolve();
+      }
+      function aoTerminar() { fim(null); }
+      function aoErro() { fim(comecou ? null : new Error('o áudio recebido não tocou')); }
+      function cancelar() { fim(erroAbort()); }
+
+      estado.fimFalaAtual = cancelar;
+      audio.addEventListener('ended', aoTerminar);
+      audio.addEventListener('error', aoErro);
+      estado.urlAudioAtual = url;
+      audio.src = url;
+      let p;
+      try { p = audio.play(); } catch (e) { fim(e); return; }
+      Promise.resolve(p).then(() => {
+        if (terminou) return;
+        comecou = true;
+        // Se o sistema pausar o áudio (ligação, outro app), a fila segue
+        vigia = setInterval(() => { if (audio.paused || audio.ended) fim(null); }, 700);
+      }, (e) => {
+        fim(e && e.name === 'NotAllowedError'
+          ? criarErro('Bloqueado', 'o navegador bloqueou o som; toque em "Voz" ou "Iniciar"')
+          : (e || new Error('falha ao tocar o áudio')));
+      });
+    });
+  }
+
+  async function falarElevenLabs(texto, voiceId, apiKey, ger) {
     const controle = new AbortController();
     estado.abortTts = controle;
-    const blob = await executarComTimeout(controle, TIMEOUT_TTS_MS, async (sinal) => {
-      const r = await fetch(URL_ELEVENLABS + encodeURIComponent(voiceId), {
-        method: 'POST',
-        headers: {
-          'xi-api-key': apiKey,
-          'Content-Type': 'application/json',
-          'Accept': 'audio/mpeg'
-        },
-        body: JSON.stringify({
-          text: texto,
-          model_id: 'eleven_flash_v2_5',
-          voice_settings: { stability: 0.5, similarity_boost: 0.75 }
-        }),
-        signal: sinal
+    let blob;
+    try {
+      blob = await executarComTimeout(controle, TIMEOUT_TTS_MS, async (sinal) => {
+        const r = await fetch(URL_ELEVENLABS + encodeURIComponent(voiceId), {
+          method: 'POST',
+          headers: {
+            'xi-api-key': apiKey,
+            'Content-Type': 'application/json',
+            'Accept': 'audio/mpeg'
+          },
+          body: JSON.stringify({
+            text: texto,
+            model_id: 'eleven_flash_v2_5',
+            voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+          }),
+          signal: sinal
+        });
+        if (!r.ok) {
+          let detalhe = '';
+          try {
+            const j = await r.json();
+            const d = j && j.detail;
+            detalhe = typeof d === 'string' ? d : (d && (d.message || d.status)) || '';
+          } catch (e) { /* corpo não é JSON */ }
+          throw new Error('HTTP ' + r.status + (detalhe ? ': ' + detalhe : ''));
+        }
+        return r.blob();
       });
-      if (!r.ok) {
-        let detalhe = '';
-        try {
-          const j = await r.json();
-          const d = j && j.detail;
-          detalhe = typeof d === 'string' ? d : (d && (d.message || d.status)) || '';
-        } catch (e) { /* corpo não é JSON */ }
-        throw new Error('HTTP ' + r.status + (detalhe ? ': ' + detalhe : ''));
-      }
-      return r.blob();
-    });
-    if (estado.abortTts === controle) estado.abortTts = null;
-    if (seq !== estado.seqFrase || controle.signal.aborted) throw erroAbort();
+    } finally {
+      if (estado.abortTts === controle) estado.abortTts = null;
+    }
+    if (ger !== estado.geracaoFala || controle.signal.aborted) throw erroAbort();
+    if (!blob || !blob.size) throw new Error('áudio vazio');
 
     liberarAudioAtual();
-    const url = URL.createObjectURL(blob);
-    estado.urlAudioAtual = url;
-    el.audio.src = url;
-    try {
-      await el.audio.play();
-    } catch (e) {
-      if (seq !== estado.seqFrase) throw erroAbort();
-      liberarAudioAtual();
-      if (e && e.name === 'NotAllowedError') {
-        throw criarErro('Bloqueado', 'o navegador bloqueou o som; toque em "Voz" ou "Iniciar"');
-      }
-      throw e;
-    }
-    estado.falando = true;
-    atualizarStatusExecucao();
+    await tocarAudio(URL.createObjectURL(blob));
   }
 
-  // Escolhe o Voice ID pelo personagem e fala. Retorna como a fala foi feita.
-  async function falar(texto, personagem, seq, configTeste) {
-    pararFala();
-    const cfg = configTeste || estado.configVoz;
-    const voiceId = personagem === 'lucia' ? cfg.vozLucia : (personagem === 'jason' ? cfg.vozJason : cfg.vozPadrao);
+  // Escolhe a voz: Lucia -> ID da Lucia; Jason e Auto -> ID do Jason; sem ID -> voz do aparelho
+  async function falarItem(item, ger) {
+    const cfg = item.config || estado.configVoz;
+    const p = normalizarPersonagem(item.personagem);
+    const voiceId = p === 'lucia' ? cfg.vozLucia : cfg.vozJason;
+    let falhouEleven = false;
     if (cfg.apiKey && voiceId) {
       try {
-        await falarElevenLabs(texto, voiceId, cfg.apiKey, seq);
+        await falarElevenLabs(item.texto, voiceId, cfg.apiKey, ger);
         return 'elevenlabs';
       } catch (e) {
-        if (seq !== estado.seqFrase || (e && e.name === 'AbortError')) return 'cancelado';
+        if (ger !== estado.geracaoFala || (e && e.name === 'AbortError')) return 'cancelado';
         console.warn('ElevenLabs falhou:', e);
-        mostrarErro('ElevenLabs falhou (' + mensagemDeErro(e) + '). Usando a voz do navegador.', true);
+        mostrarErro('ElevenLabs falhou (' + mensagemDeErro(e) + '). Usando a voz do aparelho.', true);
+        falhouEleven = true;
       }
     }
-    if (seq !== estado.seqFrase || (!configTeste && !estado.vozLigada)) return 'cancelado';
-    return falarNavegador(texto, personagem, seq) ? 'navegador' : 'sem-voz';
+    if (ger !== estado.geracaoFala) return 'cancelado';
+    const ok = await falarAparelho(item.texto, p);
+    if (!ok) return 'sem-voz';
+    return falhouEleven ? 'aparelho-apos-falha' : 'aparelho';
+  }
+
+  // Põe a frase no fim da fila. Nada é cortado: cada frase espera a anterior terminar.
+  function enfileirar(item) {
+    estado.fila.push(item);
+    if (estado.fila.length > MAX_FILA) {
+      const descartadas = estado.fila.slice(0, estado.fila.length - MANTER_NA_FILA);
+      estado.fila = estado.fila.slice(-MANTER_NA_FILA);
+      descartadas.forEach((d) => {
+        if (typeof d.aoTerminar === 'function') { try { d.aoTerminar('descartado'); } catch (e) { /* ignora */ } }
+      });
+      estado.pulandoAte = Date.now() + 3000;
+      mostrarAviso('Pulando ' + descartadas.length + ' falas atrasadas para acompanhar o jogo.', 4000);
+      setTimeout(atualizarStatus, 3100);
+    }
+    atualizarStatus();
+    processarFila();
+  }
+
+  // Fala a fila em ordem, uma frase inteira por vez, com o microfone desligado
+  async function processarFila() {
+    if (estado.processandoFila || !estado.fila.length) return;
+    estado.processandoFila = true;
+    const ger = estado.geracaoFala;
+    estado.falando = true;
+    atualizarStatus();
+    await pararEscutaEAguardar();   // anti-eco: o microfone não ouve a própria voz
+
+    while (ger === estado.geracaoFala && estado.fila.length) {
+      const item = estado.fila.shift();
+      atualizarStatus();
+      let resultado;
+      try {
+        resultado = await falarItem(item, ger);
+      } catch (e) {
+        console.warn('Falha na voz:', e);
+        resultado = 'erro';
+      }
+      if (ger !== estado.geracaoFala) resultado = 'cancelado';
+      if (typeof item.aoTerminar === 'function') {
+        try { item.aoTerminar(resultado); } catch (e) { /* ignora */ }
+      }
+    }
+    if (ger !== estado.geracaoFala) return;   // o usuário parou: pararFala já limpou o estado
+
+    estado.processandoFila = false;
+    estado.falando = false;
+    atualizarStatus();
+    agendarReinicio(ATRASO_REINICIO_MS);      // fala terminou: volta a ouvir
   }
 
   /* =========================================================
-     15. TELA SEMPRE LIGADA (Wake Lock)
+     10. TELA SEMPRE LIGADA (Wake Lock)
      ========================================================= */
   async function pedirWakeLock() {
     if (!('wakeLock' in navigator)) {
@@ -1297,6 +1274,10 @@ input[type="range"] { width: 100%; height: 44px; margin: 0; accent-color: var(--
     }
     try {
       const lock = await navigator.wakeLock.request('screen');
+      if (!estado.rodando) {   // o usuário parou enquanto o pedido estava em andamento
+        try { lock.release(); } catch (e) { /* ignora */ }
+        return;
+      }
       estado.wakeLock = lock;
       lock.addEventListener('release', () => {
         if (estado.wakeLock === lock) estado.wakeLock = null;
@@ -1317,118 +1298,111 @@ input[type="range"] { width: 100%; height: 44px; margin: 0; accent-color: var(--
     }
   }
 
-  // Ao voltar para a aba: reobtém o wake lock (o navegador solta ao esconder) e retoma o vídeo
+  // Ao voltar para a aba: reobtém o wake lock (o navegador solta ao esconder) e volta a ouvir
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible' || !estado.rodando) return;
     if (!estado.wakeLock && 'wakeLock' in navigator) pedirWakeLock();
-    const p = el.video.play();
-    if (p && p.catch) p.catch(() => {});
+    agendarReinicio(ATRASO_REINICIO_MS);
   });
 
   /* =========================================================
-     16. INICIAR / PARAR
+     11. INICIAR / PARAR
      ========================================================= */
-  async function iniciar() {
-    if (estado.rodando || estado.iniciando) return;
-    const token = ++estado.tokenInicio;
-    estado.iniciando = true;
-    atualizarBotaoIniciar();
+  function iniciar() {
+    if (estado.rodando) return;
+    if (!Reconhecimento) {
+      mostrarErro(MSG_SEM_SUPORTE);
+      return;
+    }
     esconderErro();
-    abrirPainel(null);
+    abrirPainel(false);
     desbloquearAudio();   // síncrono, ainda dentro do toque no botão
 
-    try {
-      setStatus('Abrindo câmera...', 'carregando');
-      const stream = await abrirCamera();
-      if (token !== estado.tokenInicio) { pararStream(stream); return; }
-      estado.stream = stream;
-      await ligarVideo(stream);
-      if (token !== estado.tokenInicio) return;
+    estado.rodando = true;
+    estado.erroFatal = false;
+    estado.falhasSeguidas = 0;
+    estado.proximoAtraso = ATRASO_REINICIO_MS;
+    estado.escutaJaComecou = false;
+    estado.ultimaFrase = null;
+    atualizarBotaoIniciar();
+    atualizarStatus();
+    if (!estado.vozLigada) mostrarAviso('Voz desligada: só a legenda aparece na tela.', 5000);
 
-      setStatus('Carregando OCR...', 'carregando');
-      await garantirWorker();
-      if (token !== estado.tokenInicio) return;
-
-      await pedirWakeLock();
-      if (token !== estado.tokenInicio) { liberarWakeLock(); return; }
-
-      // Tudo pronto: começa o loop de leitura
-      estado.iniciando = false;
-      estado.rodando = true;
-      estado.historico = [];
-      estado.errosOcrSeguidos = 0;
-      document.body.classList.add('rodando');
-      atualizarBotaoIniciar();
-      atualizarStatusExecucao();
-      estado.geracaoLoop++;
-      cicloOcr(estado.geracaoLoop);
-    } catch (e) {
-      if (token !== estado.tokenInicio) return;
-      console.warn('Falha ao iniciar:', e);
-      parar('Erro');
-      mostrarErro(mensagemDeErro(e));
-    }
+    iniciarReconhecimento();   // dentro do toque: o navegador pede a permissão do microfone
+    pedirWakeLock();
+    clearInterval(estado.timerVigia);
+    estado.timerVigia = setInterval(vigiarEscuta, VIGIA_ESCUTA_MS);
   }
 
   function parar(textoStatus) {
-    estado.tokenInicio++;
-    estado.geracaoLoop++;
-    estado.iniciando = false;
     estado.rodando = false;
-    clearTimeout(estado.timerOcr);
-    estado.timerOcr = null;
-    invalidarFraseAtual();
+    estado.statusParado = textoStatus || 'Parado';
+    encerrarEscuta();
+    // descarta as traduções em andamento
+    estado.geracaoTraducao++;
+    cancelarTraducao();
+    estado.cadeiaTraducao = Promise.resolve();
+    estado.pendentesTraducao = 0;
     pararFala();
-    pararStream(estado.stream);
-    estado.stream = null;
-    el.video.srcObject = null;
     liberarWakeLock();
-    document.body.classList.remove('rodando');
     atualizarBotaoIniciar();
-    setStatus(textoStatus || 'Parado', textoStatus === 'Erro' ? 'erro' : '');
+    atualizarStatus();
   }
 
   /* =========================================================
-     17. CONFIGURAÇÕES DE VOZ (formulário)
+     12. CONFIGURAÇÕES DE VOZ (formulário)
      ========================================================= */
   function preencherFormulario() {
     const c = estado.configVoz;
     el.cfgKey.value = c.apiKey;
     el.cfgLucia.value = c.vozLucia;
     el.cfgJason.value = c.vozJason;
-    el.cfgPadrao.value = c.vozPadrao;
   }
 
   function configDoFormulario() {
     return normalizarConfig({
       apiKey: el.cfgKey.value,
       vozLucia: el.cfgLucia.value,
-      vozJason: el.cfgJason.value,
-      vozPadrao: el.cfgPadrao.value
+      vozJason: el.cfgJason.value
     });
   }
 
   /* =========================================================
-     18. EVENTOS DOS BOTÕES E CONTROLES
+     13. EVENTOS DOS BOTÕES E CONTROLES
      ========================================================= */
   el.btnIniciar.addEventListener('click', () => {
-    if (estado.rodando || estado.iniciando) parar('Parado');
+    if (estado.rodando) parar('Parado');
     else iniciar();
   });
 
   el.btnVoz.addEventListener('click', () => {
     estado.vozLigada = !estado.vozLigada;
     gravarStorage(CHAVES.voz, estado.vozLigada);
-    if (estado.vozLigada) desbloquearAudio();   // gesto do usuário: libera o som
-    else pararFala();                           // OFF: não gera nem toca áudio
+    if (estado.vozLigada) {
+      desbloquearAudio();   // gesto do usuário: libera o som
+    } else {
+      // OFF: para a fila e a escuta (parar() já esvazia a fila)
+      if (estado.rodando) {
+        parar('Parado');
+        mostrarAviso('Voz desligada: a fala e a escuta pararam. Toque em Iniciar para ouvir de novo.', 6000);
+      } else {
+        pararFala();
+      }
+    }
     atualizarBotaoVoz();
-    atualizarStatusExecucao();
+    atualizarStatus();
   });
 
-  el.btnConfig.addEventListener('click', () => abrirPainel(el.painelVoz.hidden ? 'voz' : null));
-  el.btnArea.addEventListener('click', () => abrirPainel(el.painelArea.hidden ? 'area' : null));
-  el.cfgFechar.addEventListener('click', () => abrirPainel(null));
-  el.areaFechar.addEventListener('click', () => abrirPainel(null));
+  el.seletor.addEventListener('click', (ev) => {
+    const alvo = ev.target && ev.target.closest ? ev.target.closest('.btn-pers') : null;
+    if (!alvo) return;
+    estado.personagem = normalizarPersonagem(alvo.getAttribute('data-p'));
+    gravarStorage(CHAVES.personagem, estado.personagem);
+    atualizarSeletor();
+  });
+
+  el.btnConfig.addEventListener('click', () => abrirPainel(el.painelVoz.hidden));
+  el.cfgFechar.addEventListener('click', () => abrirPainel(false));
   el.erroFechar.addEventListener('click', esconderErro);
 
   el.cfgSalvar.addEventListener('click', () => {
@@ -1439,61 +1413,51 @@ input[type="range"] { width: 100%; height: 44px; margin: 0; accent-color: var(--
       : 'Não foi possível salvar no navegador (modo privado?). Os valores valem até fechar a página.';
   });
 
+  // Testa a voz escolhida no seletor com os valores do formulário (entra na fila, não corta nada)
   el.cfgTestar.addEventListener('click', () => {
     const cfg = configDoFormulario();
-    if (!estado.audioDesbloqueado) desbloquearAudio();
-    const seq = invalidarFraseAtual();
-    atualizarStatusExecucao();
-    el.cfgMsg.textContent = 'Testando...';
-    falar('Olá! Este é um teste da voz padrão.', null, seq, cfg).then((r) => {
-      if (r === 'elevenlabs') el.cfgMsg.textContent = 'ElevenLabs funcionando com o Voice ID Padrão.';
-      else if (r === 'navegador') {
-        el.cfgMsg.textContent = cfg.apiKey && cfg.vozPadrao
-          ? 'O ElevenLabs falhou; tocando com a voz do navegador.'
-          : 'Sem API Key ou Voice ID Padrão: usando a voz do navegador.';
-      } else if (r === 'sem-voz') el.cfgMsg.textContent = 'Este navegador não tem síntese de voz.';
-      else el.cfgMsg.textContent = '';
-    }).catch((e) => {
-      el.cfgMsg.textContent = 'Falha no teste: ' + mensagemDeErro(e);
+    desbloquearAudio();
+    const p = estado.personagem;
+    const quem = p === 'lucia' ? 'da Lucia' : (p === 'jason' ? 'do Jason' : 'automática');
+    const temId = !!(p === 'lucia' ? cfg.vozLucia : cfg.vozJason);
+    el.cfgMsg.textContent = estado.falando
+      ? 'O teste vai tocar depois da fala atual...'
+      : 'Testando a voz ' + quem + '...';
+    enfileirar({
+      texto: 'Olá! Este é um teste da voz ' + quem + '.',
+      personagem: p,
+      config: cfg,
+      aoTerminar: (r) => {
+        let msg = '';
+        if (r === 'elevenlabs') {
+          msg = 'ElevenLabs funcionando com o Voice ID ' + (p === 'lucia' ? 'da Lucia' : 'do Jason') + '.';
+        } else if (r === 'aparelho-apos-falha') {
+          msg = 'O ElevenLabs falhou; tocou com a voz do aparelho.';
+        } else if (r === 'aparelho') {
+          if (!cfg.apiKey) msg = 'Sem API Key: usando a voz do aparelho.';
+          else if (!temId) msg = p === 'auto'
+            ? 'O modo Auto usa o Voice ID do Jason, que está vazio: usando a voz do aparelho.'
+            : 'Sem o Voice ID ' + quem + ': usando a voz do aparelho.';
+          else msg = 'Tocou com a voz do aparelho.';
+        } else if (r === 'sem-voz') {
+          msg = 'Este navegador não tem síntese de voz.';
+        } else if (r === 'descartado') {
+          msg = 'O teste foi pulado porque a fila estava cheia.';
+        } else if (r === 'erro') {
+          msg = 'Falha no teste de voz.';
+        }
+        el.cfgMsg.textContent = msg;
+      }
     });
   });
 
-  el.rngLargura.addEventListener('input', () => {
-    estado.area.largura = limitar(el.rngLargura.value, 20, 100, 90);
-    aplicarArea();
-  });
-  el.rngAltura.addEventListener('input', () => {
-    estado.area.altura = limitar(el.rngAltura.value, 5, 60, 18);
-    aplicarArea();
-  });
-  el.rngLargura.addEventListener('change', salvarArea);
-  el.rngAltura.addEventListener('change', salvarArea);
-
-  el.chkPreproc.addEventListener('change', () => {
-    estado.preproc = el.chkPreproc.checked;
-    gravarStorage(CHAVES.preproc, estado.preproc);
-  });
-
-  // Fim de uma fala do ElevenLabs: libera a URL do blob
-  el.audio.addEventListener('ended', () => {
-    liberarAudioAtual();
-    estado.falando = false;
-    atualizarStatusExecucao();
-  });
-  el.audio.addEventListener('error', () => {
-    if (!estado.urlAudioAtual) return;
-    liberarAudioAtual();
-    estado.falando = false;
-    atualizarStatusExecucao();
-  });
-
-  // Saindo da página: solta câmera e wake lock
+  // Saindo da página: solta microfone e wake lock
   window.addEventListener('pagehide', () => {
-    if (estado.rodando || estado.iniciando) parar('Parado');
+    if (estado.rodando) parar('Parado');
   });
 
   /* =========================================================
-     19. INICIALIZAÇÃO
+     14. INICIALIZAÇÃO
      ========================================================= */
   if ('speechSynthesis' in window) {
     carregarVozes();
@@ -1504,16 +1468,20 @@ input[type="range"] { width: 100%; height: 44px; margin: 0; accent-color: var(--
     }
   }
 
-  el.rngLargura.value = String(estado.area.largura);
-  el.rngAltura.value = String(estado.area.altura);
-  el.chkPreproc.checked = estado.preproc;
-  aplicarArea();
   atualizarBotaoVoz();
   atualizarBotaoIniciar();
-  setStatus('Pronto', '');
+  atualizarSeletor();
+
+  if (!Reconhecimento) {
+    // Ex.: iPhone/Safari ou navegadores sem Web Speech API
+    el.semSuporte.hidden = false;
+    el.dica.hidden = true;
+    estado.statusParado = 'Escuta não suportada';
+  }
+  atualizarStatus();
 
   if (window.isSecureContext === false) {
-    mostrarAviso('Atenção: abra esta página por HTTPS (ou localhost). Sem isso a câmera não funciona.', 15000);
+    mostrarAviso('Atenção: abra esta página por HTTPS (ou localhost). Sem isso o microfone não funciona.', 15000);
   }
 })();
 </script>
