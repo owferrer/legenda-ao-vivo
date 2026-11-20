@@ -218,6 +218,49 @@ button, input { font: inherit; }
 .nota { margin: 4px 0 12px; font-size: 13px; line-height: 1.4; color: var(--texto-suave); }
 #cfg-msg:empty { display: none; }
 
+/* ---------- Interruptor (modo fone de ouvido) ---------- */
+.interruptor {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+}
+.interruptor input {
+  position: absolute;
+  opacity: 0;
+  width: 1px; height: 1px;
+  margin: 0;
+}
+.interruptor-trilho {
+  flex: 0 0 auto;
+  position: relative;
+  width: 52px; height: 30px;
+  border-radius: 999px;
+  background: #444;
+  border: 1px solid var(--borda);
+  transition: background 0.15s;
+}
+.interruptor-trilho::after {
+  content: "";
+  position: absolute;
+  top: 3px; left: 3px;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s;
+}
+.interruptor input:checked + .interruptor-trilho { background: var(--ok); }
+.interruptor input:checked + .interruptor-trilho::after { transform: translateX(22px); }
+.interruptor input:focus-visible + .interruptor-trilho { outline: 3px solid var(--destaque); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .interruptor-trilho, .interruptor-trilho::after { transition: none; }
+}
+
 /* ---------- Palco: frase original e tradução ---------- */
 #palco {
   flex: 1 1 auto;
@@ -263,6 +306,7 @@ button, input { font: inherit; }
   overflow-wrap: anywhere;
 }
 #faixa-traducao.pendente { opacity: 0.45; }
+#faixa-traducao .anterior { opacity: 0.6; }   /* blocos anteriores da mesma frase */
 
 /* ---------- Rodapé: seletor de personagem + controles ---------- */
 #rodape {
@@ -326,6 +370,12 @@ button, input { font: inherit; }
 <!-- Painel: Configurações de Voz -->
 <section id="painel-voz" class="painel" hidden aria-label="Configurações de Voz">
   <h2>Configurações de Voz</h2>
+  <label class="interruptor">
+    <input id="cfg-fone" type="checkbox" role="switch" checked>
+    <span class="interruptor-trilho" aria-hidden="true"></span>
+    <span>Uso com fone de ouvido</span>
+  </label>
+  <p class="nota">Com fone, deixe ligado. Sem fone, desligue para evitar eco.</p>
   <label class="campo">ElevenLabs API Key
     <input id="cfg-key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Cole sua chave aqui">
   </label>
@@ -375,16 +425,20 @@ button, input { font: inherit; }
   /* =========================================================
      1. CONSTANTES
      ========================================================= */
-  const TIMEOUT_TRADUCAO_MS = 8000;     // tempo máximo de cada serviço de tradução
+  const TIMEOUT_TRADUCAO_MS = 6000;     // tempo máximo de cada serviço de tradução
   const TIMEOUT_TTS_MS = 15000;         // tempo máximo da chamada ao ElevenLabs
-  const MAX_CACHE_TRADUCAO = 200;       // traduções guardadas em memória
-  const MAX_FILA = 4;                   // mais que isso pendente na fila: descarta as antigas
-  const MANTER_NA_FILA = 2;             // ... e mantém só as mais recentes
+  const MAX_CACHE_TRADUCAO = 300;       // traduções guardadas em memória
+  const MAX_FILA = 6;                   // mais que isso pendente na fila: descarta os mais antigos
+  const MANTER_NA_FILA = 3;             // ... e mantém só os mais recentes
   const ATRASO_REINICIO_MS = 300;       // atraso para voltar a ouvir
-  const ESPERA_FIM_ESCUTA_MS = 700;     // espera o microfone fechar antes de falar
+  const ESPERA_FIM_ESCUTA_MS = 700;     // espera o microfone fechar antes de falar (sem fone)
   const JANELA_REPETICAO_MS = 4000;     // frase repetida dentro disso é ignorada
   const VIGIA_ESCUTA_MS = 3000;         // de quanto em quanto tempo confere se a escuta está viva
-  const ESPERA_PARCIAL_MS = 1500;       // parcial parado por esse tempo é tratado como frase final
+  const MIN_PALAVRAS_TRECHO = 4;        // palavras novas que já formam um trecho para traduzir
+  const ESPERA_TRECHO_MS = 700;         // texto parado por esse tempo: envia o que houver de novo
+  const PAUSA_MYMEMORY_MS = 60000;      // MyMemory falhou: usa direto o Google por esse tempo
+  const MAX_CARACTERES_TELA = 220;      // tamanho máximo da tradução acumulada na tela
+  const MAX_PALAVRAS_ORIGINAL = 40;     // tamanho máximo do inglês mostrado na tela
 
   const PITCH = { lucia: 1.25, jason: 0.8, auto: 1 };
   const NOMES = { lucia: 'Lucia', jason: 'Jason', auto: 'Auto' };
@@ -396,7 +450,8 @@ button, input { font: inherit; }
   const CHAVES = {
     voz: 'legendaAoVivo.vozLigada',
     config: 'legendaAoVivo.configVoz',
-    personagem: 'legendaAoVivo.personagem'
+    personagem: 'legendaAoVivo.personagem',
+    fone: 'legendaAoVivo.usoFone'
   };
 
   const URL_MYMEMORY = 'https://api.mymemory.translated.net/get';
@@ -437,6 +492,7 @@ button, input { font: inherit; }
     status: $('status'), aviso: $('aviso'),
     erro: $('erro'), erroTexto: $('erro-texto'), erroFechar: $('erro-fechar'),
     btnConfig: $('btn-config'), painelVoz: $('painel-voz'),
+    cfgFone: $('cfg-fone'),
     cfgKey: $('cfg-key'), cfgLucia: $('cfg-lucia'), cfgJason: $('cfg-jason'),
     cfgSalvar: $('cfg-salvar'), cfgTestar: $('cfg-testar'), cfgFechar: $('cfg-fechar'), cfgMsg: $('cfg-msg'),
     semSuporte: $('sem-suporte'), dica: $('dica'),
@@ -475,13 +531,22 @@ button, input { font: inherit; }
     proximoAtraso: ATRASO_REINICIO_MS,
     falhasSeguidas: 0,
     aoFimEscuta: [],         // quem espera o microfone fechar (anti-eco)
-    ultimaFrase: null,       // { norm, em } para ignorar repetições
-    // tradução (em série, para manter a ordem das frases)
+    ultimaFrase: null,       // { tokens, em } última frase completa, para ignorar repetições
+    sessaoEscuta: 0,         // muda no Parar: trechos de antes deixam de valer
+    contadorFrase: 0,
+    // tradução por trechos (em paralelo, liberados na ordem em que foram pedidos)
     geracaoTraducao: 0,
-    cadeiaTraducao: Promise.resolve(),
     pendentesTraducao: 0,
-    abortTraducao: null,
+    controlesTraducao: new Set(),
     cacheTraducao: new Map(),
+    myMemoryPausadoAte: 0,
+    seqProximo: 0,           // número de sequência do próximo trecho enviado
+    seqLiberar: 0,           // próximo trecho que pode ir para a tela e a fila
+    prontos: new Map(),      // seq -> trecho já traduzido esperando os anteriores
+    fraseUltimoEnvio: 0,     // frase do último trecho enviado
+    tela: { fraseId: 0, blocos: [] },   // tradução acumulada da frase na tela
+    // modo fone de ouvido: o microfone continua ouvindo durante a fala (sem anti-eco)
+    usoFone: lerStorage(CHAVES.fone, true) !== false,
     // voz
     vozLigada: lerStorage(CHAVES.voz, true) !== false,
     configVoz: normalizarConfig(lerStorage(CHAVES.config, {})),
@@ -648,21 +713,50 @@ button, input { font: inherit; }
     });
   }
 
+  // Inglês reconhecido da frase atual (letra menor), atualizado a cada parcial
   function mostrarOriginal(texto) {
     el.dica.hidden = true;
     el.faixa.hidden = false;
-    el.faixaOriginal.textContent = texto;
+    const palavras = texto.split(' ');
+    el.faixaOriginal.textContent = palavras.length > MAX_PALAVRAS_ORIGINAL
+      ? '… ' + palavras.slice(-MAX_PALAVRAS_ORIGINAL).join(' ')
+      : texto;
   }
 
-  function mostrarTraducao(texto, pendente) {
-    el.faixaTraducao.textContent = texto;
-    el.faixaTraducao.classList.toggle('pendente', !!pendente);
+  // Tradução acumulada da frase atual (letra grande): o último bloco em destaque
+  function desenharTraducao() {
+    const blocos = estado.tela.blocos;
+    const alvo = el.faixaTraducao;
+    alvo.textContent = '';
+    if (!blocos.length) {
+      alvo.textContent = '(tradução indisponível)';
+      return;
+    }
+    // frase longa demais: mostra só o final dela
+    let inicio = blocos.length - 1;
+    let total = blocos[inicio].length;
+    while (inicio > 0 && total + blocos[inicio - 1].length + 1 <= MAX_CARACTERES_TELA) {
+      inicio--;
+      total += blocos[inicio].length + 1;
+    }
+    const corte = inicio > 0 ? '… ' : '';
+    const anteriores = blocos.slice(inicio, -1).join(' ');
+    if (anteriores) {
+      const s = document.createElement('span');
+      s.className = 'anterior';
+      s.textContent = corte + anteriores + ' ';
+      alvo.appendChild(s);
+    }
+    const ultimo = document.createElement('span');
+    ultimo.textContent = (anteriores ? '' : corte) + blocos[blocos.length - 1];
+    alvo.appendChild(ultimo);
   }
 
-  // Enquanto a nova tradução não chega, a anterior fica apagada
-  function marcarTraducaoPendente() {
-    if (!el.faixaTraducao.textContent) mostrarTraducao('...', true);
-    else el.faixaTraducao.classList.add('pendente');
+  // Enquanto o primeiro trecho de uma frase nova não chega, a tradução anterior fica apagada
+  function atualizarPendente() {
+    const pendente = estado.pendentesTraducao > 0 && estado.fraseUltimoEnvio !== estado.tela.fraseId;
+    if (pendente && !el.faixaTraducao.textContent) el.faixaTraducao.textContent = '...';
+    el.faixaTraducao.classList.toggle('pendente', pendente);
   }
 
   /* =========================================================
@@ -682,32 +776,29 @@ button, input { font: inherit; }
     esperas.forEach((f) => { try { f(); } catch (e) { /* ignora */ } });
   }
 
-  // Liga o microfone. Não faz nada se o app estiver falando (anti-eco).
+  // Sem fone (anti-eco ligado) o microfone fica desligado enquanto o app fala.
+  // Com fone o microfone continua ouvindo sempre.
+  function falaBloqueiaEscuta() {
+    return estado.falando && !estado.usoFone;
+  }
+
+  // Liga o microfone. Sem fone, não faz nada enquanto o app estiver falando (anti-eco).
   function iniciarReconhecimento() {
     if (!Reconhecimento || !estado.rodando || estado.erroFatal) return;
-    if (estado.falando || estado.recAtivo || document.hidden) return;
+    if (falaBloqueiaEscuta() || estado.recAtivo || document.hidden) return;
     clearTimeout(estado.timerReinicio);
     estado.timerReinicio = null;
 
     const rec = new Reconhecimento();
     rec.lang = 'en-US';
     rec.continuous = true;
-    // Parciais ligados: com som contínuo do jogo (música, efeitos) o navegador pode nunca
-    // marcar a frase como final. Parcial que fica parado ESPERA_PARCIAL_MS vira frase.
+    // Parciais ligados: cada resultado parcial já manda as palavras novas para traduzir
+    // (tradução por trechos, enquanto o personagem ainda está falando).
     rec.interimResults = true;
     rec.maxAlternatives = 1;
-    let parcial = null;               // { i, texto } último resultado ainda não final
-    let timerParcial = null;
-    const promovidos = new Set();     // índices já enviados como parcial estável
-    const promoverParcial = () => {
-      clearTimeout(timerParcial);
-      timerParcial = null;
-      if (!parcial) return;
-      const p = parcial;
-      parcial = null;
-      promovidos.add(p.i);
-      receberFrase(p.texto);
-    };
+    let frase = null;                 // frase em andamento (ainda sem resultado final)
+    let abertoDesde = 0;              // primeiro índice de resultado ainda não final
+    const finalizados = new Set();    // índices que já vieram como final
 
     rec.onstart = () => {
       if (rec !== estado.rec) return;
@@ -718,20 +809,28 @@ button, input { font: inherit; }
 
     // Resultados que chegam logo depois de um stop() ainda são falas do jogo: aceita
     rec.onresult = (ev) => {
-      const lista = ev.results;
-      for (let i = ev.resultIndex || 0; i < lista.length; i++) {
+      const lista = ev && ev.results;
+      if (!lista) return;
+      const partes = [];              // parciais da frase atual (o Chrome pode dividir em pedaços)
+      for (let i = Math.min(ev.resultIndex || 0, abertoDesde); i < lista.length; i++) {
         const r = lista[i];
         if (!r || !r[0]) continue;
         const t = r[0].transcript || '';
         if (r.isFinal) {
-          if (parcial && parcial.i === i) { clearTimeout(timerParcial); timerParcial = null; parcial = null; }
-          if (promovidos.has(i)) continue;   // já foi traduzida como parcial estável
-          receberFrase(t);
-        } else if (!parcial || parcial.i !== i || parcial.texto !== t) {
-          parcial = { i: i, texto: t };
-          clearTimeout(timerParcial);
-          timerParcial = setTimeout(promoverParcial, ESPERA_PARCIAL_MS);
+          if (finalizados.has(i)) continue;
+          finalizados.add(i);
+          abertoDesde = Math.max(abertoDesde, i + 1);
+          partes.length = 0;
+          if (!frase) frase = novaFrase();
+          atualizarFrase(frase, t, true);   // final: envia só o restante e zera o contador
+          frase = null;
+        } else {
+          partes.push(t);
         }
+      }
+      if (partes.length) {
+        if (!frase) frase = novaFrase();
+        atualizarFrase(frase, partes.join(' '), false);
       }
     };
 
@@ -741,15 +840,21 @@ button, input { font: inherit; }
     };
 
     rec.onend = () => {
-      if (parcial) promoverParcial();     // sessão fechou com frase sem "final": não perde
+      // Sessão fechou com frase sem "final" (reinício, silêncio): envia o que faltava.
+      // Os trechos já enviados seguem na tradução e na fila normalmente.
+      if (frase) {
+        const f = frase;
+        frase = null;
+        concluirFrase(f);
+      }
       if (rec !== estado.rec) return;
       estado.recAtivo = false;
       estado.recComecou = false;
       liberarEsperasEscuta();
       const atraso = estado.proximoAtraso;
       estado.proximoAtraso = ATRASO_REINICIO_MS;
-      // Não deixa a escuta morrer: se o modo está ligado e não está falando, reinicia
-      if (estado.rodando && !estado.falando && !estado.erroFatal && !document.hidden) {
+      // Não deixa a escuta morrer: com o modo ligado, reinicia (sem fone, só depois da fala)
+      if (estado.rodando && !falaBloqueiaEscuta() && !estado.erroFatal && !document.hidden) {
         agendarReinicio(atraso);
       }
     };
@@ -849,7 +954,7 @@ button, input { font: inherit; }
 
   // Vigia: garante que a escuta não fique parada sem motivo
   function vigiarEscuta() {
-    if (!estado.rodando || estado.erroFatal || estado.falando || document.hidden) return;
+    if (!estado.rodando || estado.erroFatal || falaBloqueiaEscuta() || document.hidden) return;
     if (estado.recAtivo) {
       // start() que nunca respondeu (acontece em alguns Androids): descarta e tenta de novo
       if (estado.escutaJaComecou && !estado.recComecou && Date.now() - estado.recDesde > 10000) {
@@ -864,46 +969,149 @@ button, input { font: inherit; }
     if (!estado.timerReinicio) iniciarReconhecimento();
   }
 
-  // Uma frase final reconhecida: limpa, filtra repetições e manda traduzir
-  function receberFrase(bruto) {
-    if (!estado.rodando) return;
-    let texto = removerPrefixo(limparTexto(bruto));
-    if (!texto || !temLetrasSuficientes(texto)) return;
+  /* ---------- Trechos: só as palavras novas de cada parcial ---------- */
+  function palavrasDe(texto) {
+    const t = removerPrefixo(limparTexto(texto));
+    return t ? t.split(' ') : [];
+  }
 
-    const norm = normalizar(texto);
-    const agora = Date.now();
-    const ultima = estado.ultimaFrase;
-    estado.ultimaFrase = { norm: norm, em: agora };
-    if (ultima && agora - ultima.em < JANELA_REPETICAO_MS) {
-      if (norm === ultima.norm) return;   // repetida (bug do modo contínuo no Android)
-      // Às vezes a frase vem acumulada ("frase anterior + nova"): fica só com a parte nova
-      if (ultima.norm.length >= 8 && norm.indexOf(ultima.norm + ' ') === 0) {
-        const palavras = texto.split(' ');
-        const n = ultima.norm.split(' ').length;
-        if (normalizar(palavras.slice(0, n).join(' ')) === ultima.norm) {
-          texto = palavras.slice(n).join(' ').trim();
-          if (!texto || !temLetrasSuficientes(texto)) return;
-        }
+  function novaFrase() {
+    const u = estado.ultimaFrase;
+    return {
+      id: ++estado.contadorFrase,
+      sessao: estado.sessaoEscuta,
+      palavras: [],            // última versão do texto reconhecido
+      enviadas: 0,             // quantas dessas palavras já foram enviadas para tradução
+      ultimoEnviado: '',       // última palavra enviada (normalizada), para alinhar revisões
+      timer: null,             // espera de ESPERA_TRECHO_MS com o texto parado
+      // frase anterior recente: no Android ela às vezes volta repetida no começo da nova
+      anterior: u && Date.now() - u.em < JANELA_REPETICAO_MS ? u.tokens : null
+    };
+  }
+
+  // Quantas palavras do começo só repetem a frase anterior (bug do modo contínuo no Android)
+  function palavrasRepetidas(frase) {
+    const ant = frase.anterior;
+    const p = frase.palavras;
+    if (!ant || !ant.length || !p.length) return 0;
+    const m = Math.min(ant.length, p.length);
+    for (let k = 0; k < m; k++) {
+      if (normalizar(p[k]) !== ant[k]) return 0;
+    }
+    if (p.length <= ant.length) return p.length;          // igual à anterior (ou o começo dela)
+    return ant.join(' ').length >= 8 ? ant.length : 0;     // "anterior + nova": fica com a nova
+  }
+
+  // Onde começam as palavras novas, mesmo se o reconhecimento revisou as já enviadas
+  function inicioDasNovas(frase) {
+    const p = frase.palavras;
+    let k = frase.enviadas;
+    if (k > 0 && normalizar(p[k - 1] || '') !== frase.ultimoEnviado) {
+      // palavras juntadas ou separadas na revisão: procura a última enviada por perto
+      for (let d = 1; d <= 3; d++) {
+        const antes = k - 1 - d;
+        const depois = k - 1 + d;
+        if (antes >= 0 && antes < p.length && normalizar(p[antes]) === frase.ultimoEnviado) { k = antes + 1; break; }
+        if (depois < p.length && normalizar(p[depois]) === frase.ultimoEnviado) { k = depois + 1; break; }
       }
     }
+    return Math.max(Math.min(k, p.length), palavrasRepetidas(frase));
+  }
 
-    estado.falhasSeguidas = 0;
-    // A voz escolhida no seletor vale a partir desta frase
-    const item = { original: texto, personagem: estado.personagem };
+  // Nova versão do texto da frase: com 4+ palavras novas envia já; senão espera o texto parar
+  function atualizarFrase(frase, texto, final) {
+    if (!estado.rodando || frase.sessao !== estado.sessaoEscuta) {
+      clearTimeout(frase.timer);
+      frase.timer = null;
+      return;
+    }
+    const palavras = palavrasDe(texto);
+    const igual = palavras.join(' ') === frase.palavras.join(' ');
+    if (!final && igual && frase.timer) return;   // mesmo texto de novo: não reinicia a espera
+    clearTimeout(frase.timer);
+    frase.timer = null;
+    if (palavras.length) {                        // parcial vazio não apaga o que já foi ouvido
+      frase.palavras = palavras;
+      estado.falhasSeguidas = 0;
+      if (!igual) mostrarOriginal(palavras.join(' '));
+    }
+    if (final) {
+      concluirFrase(frase);
+      return;
+    }
+    const novas = frase.palavras.length - inicioDasNovas(frase);
+    if (novas >= MIN_PALAVRAS_TRECHO) enviarNovas(frase, false);
+    else if (novas > 0) frase.timer = setTimeout(() => enviarNovas(frase, false), ESPERA_TRECHO_MS);
+  }
+
+  // Manda para tradução só as palavras desta frase que ainda não foram enviadas
+  function enviarNovas(frase, final) {
+    clearTimeout(frase.timer);
+    frase.timer = null;
+    if (!estado.rodando || frase.sessao !== estado.sessaoEscuta) return;
+    const p = frase.palavras;
+    const inicio = inicioDasNovas(frase);
+    if (inicio >= p.length) return;
+    const trecho = p.slice(inicio).join(' ');
+    const valido = temLetrasSuficientes(trecho);
+    if (!valido && !final) return;                // ex.: só "I": junta com as próximas palavras
+    frase.enviadas = p.length;
+    frase.ultimoEnviado = normalizar(p[p.length - 1]);
+    if (valido) enviarTrecho(trecho, frase.id);
+  }
+
+  // Fim da frase (resultado final ou a sessão fechou): envia o restante; a próxima começa do zero
+  function concluirFrase(frase) {
+    enviarNovas(frase, true);
+    if (frase.palavras.length) {
+      estado.ultimaFrase = { tokens: frase.palavras.map(normalizar), em: Date.now() };
+    }
+  }
+
+  // Traduz o trecho em paralelo; o resultado só vai para a tela e a fila na ordem do pedido
+  function enviarTrecho(texto, fraseId) {
     const ger = estado.geracaoTraducao;
+    // A voz escolhida no seletor vale a partir deste trecho
+    const item = { seq: estado.seqProximo++, fraseId: fraseId, personagem: estado.personagem, traducao: '' };
     estado.pendentesTraducao++;
+    estado.fraseUltimoEnvio = fraseId;
+    atualizarPendente();
     atualizarStatus();
-    estado.cadeiaTraducao = estado.cadeiaTraducao
-      .then(() => traduzirItem(item, ger))
-      .catch((e) => {
-        console.log('Falha ao processar frase:', e);
-        mostrarErro('Falha ao processar frase: ' + mensagemDeErro(e), true);
-      })
-      .then(() => {
-        if (ger !== estado.geracaoTraducao) return;
-        estado.pendentesTraducao = Math.max(0, estado.pendentesTraducao - 1);
-        atualizarStatus();
-      });
+    traduzir(texto, ger).then((t) => t, (e) => {
+      if (ger === estado.geracaoTraducao && !(e && e.name === 'AbortError')) {
+        console.warn('Tradução falhou:', e);
+        mostrarErro('Falha na tradução: ' + mensagemDeErro(e), true);
+      }
+      return '';
+    }).then((t) => {
+      if (ger !== estado.geracaoTraducao) return;   // o usuário parou o app
+      item.traducao = t ? removerPrefixo(t) : '';
+      estado.prontos.set(item.seq, item);
+      liberarProntos();
+    });
+  }
+
+  // Libera em ordem: um trecho só entra na fila depois que o anterior já entrou
+  function liberarProntos() {
+    while (estado.prontos.has(estado.seqLiberar)) {
+      const item = estado.prontos.get(estado.seqLiberar);
+      estado.prontos.delete(estado.seqLiberar);
+      estado.seqLiberar++;
+      estado.pendentesTraducao = Math.max(0, estado.pendentesTraducao - 1);
+      mostrarTrecho(item);
+      if (item.traducao && estado.vozLigada) {
+        enfileirar({ texto: item.traducao, personagem: item.personagem });
+      }
+    }
+    atualizarPendente();
+    atualizarStatus();
+  }
+
+  function mostrarTrecho(item) {
+    if (estado.tela.fraseId !== item.fraseId) estado.tela = { fraseId: item.fraseId, blocos: [] };
+    if (item.traducao) estado.tela.blocos.push(item.traducao);
+    else if (estado.tela.blocos.length) return;   // falhou: mantém o que já aparece
+    desenharTraducao();
   }
 
   /* =========================================================
@@ -918,17 +1126,22 @@ button, input { font: inherit; }
     return t;
   }
 
-  function novoControleTraducao() {
+  // Cada pedido tem o próprio AbortController (vários trechos podem estar no ar ao mesmo tempo)
+  async function comControle(tarefa) {
     const c = new AbortController();
-    estado.abortTraducao = c;
-    return c;
+    estado.controlesTraducao.add(c);
+    try {
+      return await tarefa(c);
+    } finally {
+      estado.controlesTraducao.delete(c);
+    }
   }
 
   function cancelarTraducao() {
-    if (estado.abortTraducao) {
-      try { estado.abortTraducao.abort(); } catch (e) { /* ignora */ }
-      estado.abortTraducao = null;
-    }
+    estado.controlesTraducao.forEach((c) => {
+      try { c.abort(); } catch (e) { /* ignora */ }
+    });
+    estado.controlesTraducao.clear();
   }
 
   async function traduzirMyMemory(texto, controle) {
@@ -965,14 +1178,20 @@ button, input { font: inherit; }
     const chave = entrada.toLowerCase();
     if (estado.cacheTraducao.has(chave)) return estado.cacheTraducao.get(chave);
 
-    let resultado;
-    try {
-      resultado = await traduzirMyMemory(entrada, novoControleTraducao());
-    } catch (e) {
-      if (e && e.name === 'AbortError') throw e;          // o usuário parou o app
-      console.warn('MyMemory falhou, tentando Google:', e);
+    let resultado = null;
+    if (Date.now() >= estado.myMemoryPausadoAte) {
+      try {
+        resultado = await comControle((c) => traduzirMyMemory(entrada, c));
+      } catch (e) {
+        if (e && e.name === 'AbortError') throw e;        // o usuário parou o app
+        console.warn('MyMemory falhou, tentando Google:', e);
+        // evita esperar de novo um serviço fora do ar a cada trecho
+        estado.myMemoryPausadoAte = Date.now() + PAUSA_MYMEMORY_MS;
+      }
+    }
+    if (resultado === null) {
       if (ger !== estado.geracaoTraducao) throw erroAbort();
-      resultado = await traduzirGoogle(entrada, novoControleTraducao());
+      resultado = await comControle((c) => traduzirGoogle(entrada, c));
     }
 
     estado.cacheTraducao.set(chave, resultado);
@@ -980,31 +1199,6 @@ button, input { font: inherit; }
       estado.cacheTraducao.delete(estado.cacheTraducao.keys().next().value);
     }
     return resultado;
-  }
-
-  // Fluxo de uma frase: exibe o original -> traduz -> exibe a tradução -> entra na fila de fala
-  async function traduzirItem(item, ger) {
-    if (ger !== estado.geracaoTraducao) return;
-    mostrarOriginal(item.original);
-    marcarTraducaoPendente();
-
-    let traducao = null;
-    try {
-      traducao = await traduzir(item.original, ger);
-    } catch (e) {
-      if (ger !== estado.geracaoTraducao || (e && e.name === 'AbortError')) return;
-      console.warn('Tradução falhou:', e);
-      mostrarErro('Falha na tradução: ' + mensagemDeErro(e), true);
-    }
-    if (ger !== estado.geracaoTraducao) return;
-
-    traducao = traducao ? removerPrefixo(traducao) : '';
-    if (!traducao) {
-      mostrarTraducao('(tradução indisponível)', false);
-      return;
-    }
-    mostrarTraducao(traducao, false);
-    if (estado.vozLigada) enfileirar({ texto: traducao, personagem: item.personagem });
   }
 
   /* =========================================================
@@ -1243,7 +1437,8 @@ button, input { font: inherit; }
     return falhouEleven ? 'aparelho-apos-falha' : 'aparelho';
   }
 
-  // Põe a frase no fim da fila. Nada é cortado: cada frase espera a anterior terminar.
+  // Põe o trecho no fim da fila. Nada é cortado: cada trecho espera o anterior terminar.
+  // Com mais de MAX_FILA pendentes, descarta os mais antigos (a fala em andamento continua).
   function enfileirar(item) {
     estado.fila.push(item);
     if (estado.fila.length > MAX_FILA) {
@@ -1260,14 +1455,15 @@ button, input { font: inherit; }
     processarFila();
   }
 
-  // Fala a fila em ordem, uma frase inteira por vez, com o microfone desligado
+  // Fala a fila em ordem, um trecho inteiro por vez.
+  // Com fone o microfone segue ouvindo; sem fone ele fica desligado durante a fala.
   async function processarFila() {
     if (estado.processandoFila || !estado.fila.length) return;
     estado.processandoFila = true;
     const ger = estado.geracaoFala;
     estado.falando = true;
     atualizarStatus();
-    await pararEscutaEAguardar();   // anti-eco: o microfone não ouve a própria voz
+    if (!estado.usoFone) await pararEscutaEAguardar();   // anti-eco: não ouve a própria voz
 
     while (ger === estado.geracaoFala && estado.fila.length) {
       const item = estado.fila.shift();
@@ -1289,7 +1485,8 @@ button, input { font: inherit; }
     estado.processandoFila = false;
     estado.falando = false;
     atualizarStatus();
-    agendarReinicio(ATRASO_REINICIO_MS);      // fala terminou: volta a ouvir
+    // fala terminou: volta a ouvir (com fone a escuta já está ligada; não adia um reinício já agendado)
+    if (!estado.recAtivo && !estado.timerReinicio) agendarReinicio(ATRASO_REINICIO_MS);
   }
 
   /* =========================================================
@@ -1365,12 +1562,16 @@ button, input { font: inherit; }
   function parar(textoStatus) {
     estado.rodando = false;
     estado.statusParado = textoStatus || 'Parado';
+    estado.sessaoEscuta++;     // frases em andamento deixam de enviar trechos
     encerrarEscuta();
-    // descarta as traduções em andamento
+    // descarta as traduções em andamento e zera a sequência dos trechos
     estado.geracaoTraducao++;
     cancelarTraducao();
-    estado.cadeiaTraducao = Promise.resolve();
     estado.pendentesTraducao = 0;
+    estado.prontos.clear();
+    estado.seqProximo = 0;
+    estado.seqLiberar = 0;
+    atualizarPendente();
     pararFala();
     liberarWakeLock();
     atualizarBotaoIniciar();
@@ -1381,6 +1582,7 @@ button, input { font: inherit; }
      12. CONFIGURAÇÕES DE VOZ (formulário)
      ========================================================= */
   function preencherFormulario() {
+    el.cfgFone.checked = estado.usoFone;
     const c = estado.configVoz;
     el.cfgKey.value = c.apiKey;
     el.cfgLucia.value = c.vozLucia;
@@ -1427,6 +1629,18 @@ button, input { font: inherit; }
     estado.personagem = normalizarPersonagem(alvo.getAttribute('data-p'));
     gravarStorage(CHAVES.personagem, estado.personagem);
     atualizarSeletor();
+  });
+
+  // Interruptor "Uso com fone de ouvido": vale na hora e fica salvo neste aparelho
+  el.cfgFone.addEventListener('change', () => {
+    estado.usoFone = !!el.cfgFone.checked;
+    gravarStorage(CHAVES.fone, estado.usoFone);
+    el.cfgMsg.textContent = estado.usoFone
+      ? 'Modo fone ligado: o microfone continua ouvindo enquanto o app fala.'
+      : 'Modo fone desligado: o microfone pausa enquanto o app fala (evita eco).';
+    if (!estado.rodando) return;
+    if (falaBloqueiaEscuta()) pararEscutaEAguardar();   // sem fone: já vale para a fala atual
+    else agendarReinicio(ATRASO_REINICIO_MS);
   });
 
   el.btnConfig.addEventListener('click', () => abrirPainel(el.painelVoz.hidden));
@@ -1499,6 +1713,7 @@ button, input { font: inherit; }
   atualizarBotaoVoz();
   atualizarBotaoIniciar();
   atualizarSeletor();
+  el.cfgFone.checked = estado.usoFone;
 
   if (!Reconhecimento) {
     // Ex.: iPhone/Safari ou navegadores sem Web Speech API
