@@ -1,0 +1,1521 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#000000">
+<meta name="color-scheme" content="dark">
+<title>Legenda Ao Vivo - Dual Voice</title>
+<style>
+/* =========================================================
+   ESTILOS
+   Tema escuro fixo (app de câmera) e alto contraste.
+   ========================================================= */
+:root {
+  --fundo: #000;
+  --painel: rgba(20, 20, 22, 0.95);
+  --texto: #fff;
+  --texto-suave: #c8c8c8;
+  --destaque: #ffe600;          /* amarelo da legenda */
+  --ok: #1fd17a;
+  --erro: #ff5a5f;
+  --borda: rgba(255, 255, 255, 0.22);
+  --margem: 16px;               /* margem lateral */
+  --topo-seguro: env(safe-area-inset-top, 0px);
+  --base-segura: env(safe-area-inset-bottom, 0px);
+}
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;              /* sem rolagem da página (nem horizontal) */
+  background: var(--fundo);
+  color: var(--texto);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+body { overscroll-behavior: none; touch-action: manipulation; }
+button, input { font: inherit; }
+
+/* ---------- Vídeo da câmera em tela cheia ---------- */
+#video {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;             /* o recorte do OCR leva isso em conta */
+  background: #000;
+  z-index: 0;
+}
+
+/* ---------- Retângulo guia (área lida pelo OCR) ---------- */
+#guia {
+  position: fixed;
+  left: 50%; top: 50%;
+  width: 90%; height: 18%;       /* valores reais vêm do JS / localStorage */
+  transform: translate(-50%, -50%);
+  border: 2px solid var(--destaque);
+  border-radius: 10px;
+  box-shadow: 0 0 0 200vmax rgba(0, 0, 0, 0.4);   /* escurece o que fica fora */
+  pointer-events: none;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#guia-rotulo {
+  position: absolute;
+  left: 6px; top: -24px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--destaque);
+  text-shadow: 0 1px 2px #000;
+  white-space: nowrap;
+}
+#dica {
+  padding: 6px 12px;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.35;
+  color: var(--texto-suave);
+  overflow: hidden;
+  max-height: 100%;
+}
+body.rodando #dica { display: none; }
+
+/* ---------- Barra superior ---------- */
+#topo {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: calc(8px + var(--topo-seguro)) var(--margem) 8px;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.78), rgba(0,0,0,0));
+}
+#titulo {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#titulo small { font-weight: 700; color: var(--destaque); }
+#status {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 55%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.6);
+  border: 1px solid var(--borda);
+}
+#status::before {
+  content: "";
+  display: inline-block;
+  width: 8px; height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: #888;
+  vertical-align: middle;
+}
+#status[data-tipo="ok"]::before { background: var(--ok); }
+#status[data-tipo="carregando"]::before { background: var(--destaque); animation: piscar 1s infinite; }
+#status[data-tipo="erro"]::before { background: var(--erro); }
+@keyframes piscar { 50% { opacity: 0.2; } }
+@media (prefers-reduced-motion: reduce) {
+  #status[data-tipo="carregando"]::before { animation: none; }
+}
+
+/* ---------- Botões ---------- */
+.btn {
+  min-height: 44px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--borda);
+  background: #2a2a2e;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.btn:active { transform: scale(0.98); }
+.btn:focus-visible, .btn-icone:focus-visible, input:focus-visible {
+  outline: 3px solid var(--destaque);
+  outline-offset: 2px;
+}
+.btn:disabled { opacity: 0.6; }
+.btn.primario { background: var(--destaque); color: #000; border-color: transparent; }
+.btn.grande {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 60px;
+  padding: 8px 6px;
+  font-size: 18px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.btn.iniciar { background: var(--ok); color: #000; border-color: transparent; }
+.btn.parar { background: var(--erro); color: #000; border-color: transparent; }
+.btn.voz { background: var(--destaque); color: #000; border: 2px solid var(--destaque); }
+.btn.voz.desligada { background: #222; color: #fff; border: 2px solid #fff; }
+#btn-area { flex: 0.7 1 0; }
+.btn-icone {
+  flex: 0 0 auto;
+  width: 44px; height: 44px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 1px solid var(--borda);
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  cursor: pointer;
+}
+.btn-icone svg { width: 24px; height: 24px; fill: currentColor; }
+
+/* ---------- Avisos e erros ---------- */
+#aviso {
+  position: fixed;
+  z-index: 4;
+  left: var(--margem); right: var(--margem);
+  top: calc(62px + var(--topo-seguro));
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(0,0,0,0.65);
+  color: #ddd;
+  font-size: 12px;
+  text-align: center;
+}
+#erro {
+  position: fixed;
+  z-index: 20;
+  left: var(--margem); right: var(--margem);
+  top: calc(62px + var(--topo-seguro));
+  max-width: 520px;
+  margin: 0 auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 8px 8px 14px;
+  border-radius: 12px;
+  background: #3b0c10;
+  border: 1px solid var(--erro);
+  font-size: 15px;
+  line-height: 1.4;
+}
+#erro-texto { flex: 1 1 auto; min-width: 0; padding-top: 4px; overflow-wrap: anywhere; }
+#erro-fechar { font-size: 22px; line-height: 1; }
+
+/* ---------- Painéis (voz e área) ---------- */
+.painel {
+  position: fixed;
+  z-index: 10;
+  left: var(--margem); right: var(--margem);
+  top: calc(62px + var(--topo-seguro));
+  max-width: 520px;
+  margin: 0 auto;
+  max-height: calc(100% - 62px - var(--topo-seguro) - 100px - var(--base-segura));
+  overflow-y: auto;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--painel);
+  border: 1px solid var(--borda);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+}
+.painel h2 { margin: 0 0 12px; font-size: 18px; }
+.campo { display: block; margin-bottom: 12px; font-size: 14px; color: var(--texto-suave); }
+.campo input {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--borda);
+  background: #111;
+  color: #fff;
+  font-size: 16px;               /* 16px evita zoom automático no iOS */
+}
+.campo-range { display: block; margin-bottom: 6px; font-size: 15px; }
+.campo-range .rotulo { display: flex; justify-content: space-between; }
+.campo-range output { font-weight: 800; color: var(--destaque); }
+input[type="range"] { width: 100%; height: 44px; margin: 0; accent-color: var(--destaque); }
+.check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  margin: 4px 0 12px;
+  font-size: 15px;
+}
+.check input { width: 22px; height: 22px; flex: 0 0 auto; accent-color: var(--destaque); }
+.linha-botoes { display: flex; flex-wrap: wrap; gap: 8px; }
+.linha-botoes .btn { flex: 1 1 auto; }
+.nota { margin: 4px 0 12px; font-size: 13px; line-height: 1.4; color: var(--texto-suave); }
+#cfg-msg:empty { display: none; }
+
+/* ---------- Rodapé: faixa da legenda + controles ---------- */
+#rodape {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 var(--margem) calc(12px + var(--base-segura));
+  pointer-events: none;
+}
+#rodape > * { pointer-events: auto; }
+#faixa {
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: 10px 14px 12px;
+  border-radius: 14px;
+  background: rgba(0,0,0,0.8);
+  border: 1px solid rgba(255,255,255,0.12);
+  text-align: center;
+}
+#faixa-original {
+  margin-bottom: 4px;
+  font-size: 14px;
+  line-height: 1.35;
+  color: var(--texto-suave);
+  overflow-wrap: anywhere;
+}
+#faixa-personagem { color: #fff; font-weight: 800; }
+#faixa-traducao {
+  font-size: clamp(22px, 6.4vw, 42px);
+  line-height: 1.22;
+  font-weight: 800;
+  color: var(--destaque);
+  text-shadow: 0 2px 4px #000;
+  overflow-wrap: anywhere;
+}
+#faixa-traducao.pendente { opacity: 0.45; }
+#controles { display: flex; gap: 10px; }
+</style>
+</head>
+<body>
+
+<!-- Vídeo da câmera (fundo), canvas oculto para o recorte e único <audio> para as falas -->
+<video id="video" playsinline webkit-playsinline muted autoplay></video>
+<canvas id="canvas" hidden></canvas>
+<audio id="audio" preload="auto"></audio>
+
+<!-- Retângulo guia: só o que estiver aqui dentro é lido pelo OCR -->
+<div id="guia" aria-hidden="true">
+  <span id="guia-rotulo">Área de leitura</span>
+  <span id="dica">Toque em Iniciar e aponte a câmera para a legenda, deixando-a dentro deste retângulo</span>
+</div>
+
+<!-- Barra superior -->
+<header id="topo">
+  <div id="titulo">Legenda Ao Vivo <small>Dual Voice</small></div>
+  <div id="status" role="status" aria-live="polite" data-tipo="">Pronto</div>
+  <button id="btn-config" class="btn-icone" type="button" aria-label="Configurações de Voz" aria-expanded="false" aria-controls="painel-voz">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.488.488 0 0 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+  </button>
+</header>
+
+<!-- Aviso discreto e caixa de erro -->
+<div id="aviso" hidden></div>
+<div id="erro" role="alert" hidden>
+  <span id="erro-texto"></span>
+  <button id="erro-fechar" class="btn-icone" type="button" aria-label="Fechar mensagem de erro">&times;</button>
+</div>
+
+<!-- Painel: Configurações de Voz -->
+<section id="painel-voz" class="painel" hidden aria-label="Configurações de Voz">
+  <h2>Configurações de Voz</h2>
+  <label class="campo">ElevenLabs API Key
+    <input id="cfg-key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Cole sua chave aqui">
+  </label>
+  <label class="campo">Voice ID da Lucia
+    <input id="cfg-lucia" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="ID da voz no ElevenLabs">
+  </label>
+  <label class="campo">Voice ID do Jason
+    <input id="cfg-jason" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="ID da voz no ElevenLabs">
+  </label>
+  <label class="campo">Voice ID Padrão (narrador/outros)
+    <input id="cfg-padrao" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="ID da voz no ElevenLabs">
+  </label>
+  <p class="nota">Sem API Key (ou sem o Voice ID do personagem) o app usa a voz do próprio navegador. A chave fica salva só neste aparelho e é enviada apenas ao ElevenLabs.</p>
+  <div class="linha-botoes">
+    <button id="cfg-salvar" class="btn primario" type="button">Salvar</button>
+    <button id="cfg-testar" class="btn" type="button">Testar voz</button>
+    <button id="cfg-fechar" class="btn" type="button">Fechar</button>
+  </div>
+  <p id="cfg-msg" class="nota" aria-live="polite"></p>
+</section>
+
+<!-- Painel: tamanho da área de leitura -->
+<section id="painel-area" class="painel" hidden aria-label="Área de leitura">
+  <h2>Área de leitura</h2>
+  <label class="campo-range">
+    <span class="rotulo"><span>Largura</span><output id="out-largura">90%</output></span>
+    <input id="rng-largura" type="range" min="20" max="100" step="1" value="90">
+  </label>
+  <label class="campo-range">
+    <span class="rotulo"><span>Altura</span><output id="out-altura">18%</output></span>
+    <input id="rng-altura" type="range" min="5" max="60" step="1" value="18">
+  </label>
+  <label class="check">
+    <input id="chk-preproc" type="checkbox" checked>
+    Melhorar contraste (preto e branco) antes do OCR
+  </label>
+  <div class="linha-botoes">
+    <button id="area-fechar" class="btn" type="button">Fechar</button>
+  </div>
+</section>
+
+<!-- Rodapé: faixa da legenda traduzida e botões principais -->
+<footer id="rodape">
+  <div id="faixa" hidden aria-live="polite">
+    <div id="faixa-original"><span id="faixa-personagem"></span><span id="faixa-texto-original"></span></div>
+    <div id="faixa-traducao"></div>
+  </div>
+  <div id="controles">
+    <button id="btn-iniciar" class="btn grande iniciar" type="button">Iniciar</button>
+    <button id="btn-voz" class="btn grande voz" type="button" aria-pressed="true">Voz: ON</button>
+    <button id="btn-area" class="btn grande" type="button" aria-expanded="false" aria-controls="painel-area">Área</button>
+  </div>
+</footer>
+
+<!-- OCR: Tesseract.js (versão fixa) -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+
+<script>
+(function () {
+  'use strict';
+
+  /* =========================================================
+     1. CONSTANTES
+     ========================================================= */
+  const INTERVALO_OCR_MS = 800;         // intervalo entre leituras do OCR
+  const LIMIAR_SIMILARIDADE = 0.85;     // >= isso: considera a mesma legenda
+  const HISTORICO_FRASES = 3;           // compara com as últimas N frases aceitas
+  const CONFIANCA_MINIMA = 30;          // confiança média mínima do Tesseract (0 a 100)
+  const TIMEOUT_TRADUCAO_MS = 8000;     // tempo máximo de cada serviço de tradução
+  const TIMEOUT_TTS_MS = 15000;         // tempo máximo da chamada ao ElevenLabs
+  const MAX_CACHE_TRADUCAO = 200;       // traduções guardadas em memória
+
+  // Prefixo de personagem: "Lucia:", "LUCIA:", "Jason:", "JASON:" (aceita também "Lúcia:")
+  const REGEX_PERSONAGEM = /^\s*(l[uú]cia|jason)\s*:\s*/i;
+  const NOMES_PERSONAGEM = { lucia: 'Lucia', jason: 'Jason' };
+
+  // Chaves do localStorage
+  const CHAVES = {
+    area: 'legendaAoVivo.area',
+    voz: 'legendaAoVivo.vozLigada',
+    config: 'legendaAoVivo.configVoz',
+    preproc: 'legendaAoVivo.preprocessar'
+  };
+
+  const URL_MYMEMORY = 'https://api.mymemory.translated.net/get';
+  const URL_GOOGLE = 'https://translate.googleapis.com/translate_a/single';
+  const URL_ELEVENLABS = 'https://api.elevenlabs.io/v1/text-to-speech/';
+
+  /* =========================================================
+     2. ARMAZENAMENTO (localStorage sempre com try/catch)
+     ========================================================= */
+  function lerStorage(chave, padrao) {
+    try {
+      const valor = window.localStorage.getItem(chave);
+      return valor === null ? padrao : JSON.parse(valor);
+    } catch (e) {
+      return padrao;   // modo privado, armazenamento bloqueado ou JSON inválido
+    }
+  }
+
+  function gravarStorage(chave, valor) {
+    try {
+      window.localStorage.setItem(chave, JSON.stringify(valor));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /* =========================================================
+     3. ELEMENTOS DA PÁGINA
+     ========================================================= */
+  const $ = (id) => document.getElementById(id);
+  const el = {
+    video: $('video'), canvas: $('canvas'), audio: $('audio'), guia: $('guia'),
+    status: $('status'), aviso: $('aviso'),
+    erro: $('erro'), erroTexto: $('erro-texto'), erroFechar: $('erro-fechar'),
+    btnConfig: $('btn-config'), painelVoz: $('painel-voz'),
+    cfgKey: $('cfg-key'), cfgLucia: $('cfg-lucia'), cfgJason: $('cfg-jason'), cfgPadrao: $('cfg-padrao'),
+    cfgSalvar: $('cfg-salvar'), cfgTestar: $('cfg-testar'), cfgFechar: $('cfg-fechar'), cfgMsg: $('cfg-msg'),
+    painelArea: $('painel-area'), rngLargura: $('rng-largura'), rngAltura: $('rng-altura'),
+    outLargura: $('out-largura'), outAltura: $('out-altura'), chkPreproc: $('chk-preproc'),
+    areaFechar: $('area-fechar'),
+    faixa: $('faixa'), faixaPersonagem: $('faixa-personagem'),
+    faixaOriginal: $('faixa-texto-original'), faixaTraducao: $('faixa-traducao'),
+    btnIniciar: $('btn-iniciar'), btnVoz: $('btn-voz'), btnArea: $('btn-area')
+  };
+  const ctx = el.canvas.getContext('2d', { willReadFrequently: true });
+
+  /* =========================================================
+     4. ESTADO DO APP
+     ========================================================= */
+  function limitar(valor, min, max, padrao) {
+    const n = Number(valor);
+    if (!isFinite(n)) return padrao;
+    return Math.min(max, Math.max(min, n));
+  }
+
+  function normalizarConfig(c) {
+    const obj = c && typeof c === 'object' ? c : {};
+    const s = (v) => (typeof v === 'string' ? v.trim() : '');
+    return { apiKey: s(obj.apiKey), vozLucia: s(obj.vozLucia), vozJason: s(obj.vozJason), vozPadrao: s(obj.vozPadrao) };
+  }
+
+  const areaSalva = lerStorage(CHAVES.area, null) || {};
+
+  const estado = {
+    // câmera e ciclo de leitura
+    stream: null,
+    rodando: false,
+    iniciando: false,
+    tokenInicio: 0,          // invalida um "Iniciar" em andamento quando o usuário cancela
+    geracaoLoop: 0,          // evita dois loops de OCR ao parar e iniciar rápido
+    lendo: false,
+    timerOcr: null,
+    errosOcrSeguidos: 0,
+    // OCR
+    worker: null,
+    workerPromise: null,
+    // frases
+    historico: [],           // últimas frases aceitas (normalizadas)
+    seqFrase: 0,             // cada nova legenda incrementa; respostas antigas são descartadas
+    // tradução
+    abortTraducao: null,
+    traduzindo: false,
+    cacheTraducao: new Map(),
+    // voz
+    vozLigada: lerStorage(CHAVES.voz, true) !== false,
+    configVoz: normalizarConfig(lerStorage(CHAVES.config, {})),
+    abortTts: null,
+    urlAudioAtual: null,
+    urlSilencio: null,
+    utteranceAtual: null,
+    falando: false,
+    audioDesbloqueado: false,
+    // tela
+    wakeLock: null,
+    // preferências de leitura
+    area: {
+      largura: limitar(areaSalva.largura, 20, 100, 90),
+      altura: limitar(areaSalva.altura, 5, 60, 18)
+    },
+    preproc: lerStorage(CHAVES.preproc, true) !== false
+  };
+
+  /* =========================================================
+     5. UTILITÁRIOS
+     ========================================================= */
+  function criarErro(nome, mensagem) {
+    const e = new Error(mensagem);
+    e.name = nome;
+    return e;
+  }
+
+  function erroAbort() {
+    return criarErro('AbortError', 'cancelado');
+  }
+
+  // Converte qualquer erro em uma mensagem legível em português
+  function mensagemDeErro(e) {
+    if (!e) return 'erro desconhecido';
+    const camera = {
+      NotAllowedError: 'Permissão da câmera negada. Libere o acesso à câmera nas configurações do navegador e toque em Iniciar de novo.',
+      PermissionDeniedError: 'Permissão da câmera negada. Libere o acesso à câmera nas configurações do navegador e toque em Iniciar de novo.',
+      NotFoundError: 'Nenhuma câmera encontrada neste aparelho.',
+      DevicesNotFoundError: 'Nenhuma câmera encontrada neste aparelho.',
+      NotReadableError: 'A câmera está em uso por outro aplicativo. Feche-o e tente de novo.',
+      TrackStartError: 'A câmera está em uso por outro aplicativo. Feche-o e tente de novo.',
+      OverconstrainedError: 'A câmera não aceitou as configurações pedidas.',
+      SecurityError: 'Acesso à câmera bloqueado. A página precisa ser aberta por HTTPS.'
+    };
+    if (camera[e.name]) return camera[e.name];
+    if (e.name === 'TimeoutError') return 'tempo esgotado, internet lenta?';
+    if (e.name === 'TypeError' && /fetch|network|load failed/i.test(String(e.message))) {
+      return 'falha de rede: sem internet ou serviço bloqueado';
+    }
+    return e.message || String(e);
+  }
+
+  // Executa uma tarefa com fetch e timeout. O timeout aborta o mesmo AbortController
+  // e vira um erro "TimeoutError"; um cancelamento externo continua sendo "AbortError".
+  async function executarComTimeout(controle, ms, tarefa) {
+    let expirou = false;
+    const timer = setTimeout(() => { expirou = true; controle.abort(); }, ms);
+    try {
+      return await tarefa(controle.signal);
+    } catch (e) {
+      if (expirou) throw criarErro('TimeoutError', 'tempo esgotado');
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  // Decodifica entidades HTML (&#39; etc.) que o MyMemory às vezes devolve
+  function decodificarEntidades(s) {
+    if (s.indexOf('&') === -1) return s;
+    try {
+      const doc = new DOMParser().parseFromString(s, 'text/html');
+      return doc.documentElement.textContent || s;
+    } catch (e) {
+      return s;
+    }
+  }
+
+  /* =========================================================
+     6. INTERFACE: status, erros, avisos, painéis e faixa
+     ========================================================= */
+  function setStatus(texto, tipo) {
+    el.status.textContent = texto;
+    el.status.setAttribute('data-tipo', tipo || '');
+  }
+
+  // Durante a execução o status mostra a etapa mais relevante
+  function atualizarStatusExecucao() {
+    if (!estado.rodando) return;
+    if (estado.traduzindo) setStatus('Traduzindo...', 'carregando');
+    else if (estado.falando) setStatus('Falando...', 'ok');
+    else setStatus('Lendo...', 'ok');
+  }
+
+  let timerErro = null;
+  function mostrarErro(msg, temporario) {
+    el.erroTexto.textContent = msg;
+    el.erro.hidden = false;
+    clearTimeout(timerErro);
+    if (temporario) timerErro = setTimeout(esconderErro, 6000);
+  }
+  function esconderErro() {
+    clearTimeout(timerErro);
+    el.erro.hidden = true;
+  }
+
+  let timerAviso = null;
+  function mostrarAviso(msg, ms) {
+    el.aviso.textContent = msg;
+    el.aviso.hidden = false;
+    clearTimeout(timerAviso);
+    timerAviso = setTimeout(() => { el.aviso.hidden = true; }, ms || 9000);
+  }
+
+  function abrirPainel(qual) {   // 'voz', 'area' ou null (fecha os dois)
+    const vozAberto = qual === 'voz';
+    const areaAberta = qual === 'area';
+    el.painelVoz.hidden = !vozAberto;
+    el.painelArea.hidden = !areaAberta;
+    el.btnConfig.setAttribute('aria-expanded', String(vozAberto));
+    el.btnArea.setAttribute('aria-expanded', String(areaAberta));
+    if (vozAberto) {
+      preencherFormulario();
+      el.cfgMsg.textContent = '';
+    }
+  }
+
+  function atualizarBotaoIniciar() {
+    const b = el.btnIniciar;
+    if (estado.iniciando) {
+      b.textContent = 'Cancelar';
+      b.className = 'btn grande parar';
+    } else if (estado.rodando) {
+      b.textContent = 'Parar';
+      b.className = 'btn grande parar';
+    } else {
+      b.textContent = 'Iniciar';
+      b.className = 'btn grande iniciar';
+    }
+  }
+
+  function atualizarBotaoVoz() {
+    el.btnVoz.textContent = estado.vozLigada ? 'Voz: ON' : 'Voz: OFF';
+    el.btnVoz.setAttribute('aria-pressed', String(estado.vozLigada));
+    el.btnVoz.classList.toggle('desligada', !estado.vozLigada);
+  }
+
+  function mostrarOriginal(personagem, texto) {
+    el.faixa.hidden = false;
+    el.faixaPersonagem.textContent = personagem ? NOMES_PERSONAGEM[personagem] + ': ' : '';
+    el.faixaOriginal.textContent = texto;
+  }
+
+  function mostrarTraducao(texto, pendente) {
+    el.faixaTraducao.textContent = texto;
+    el.faixaTraducao.classList.toggle('pendente', !!pendente);
+  }
+
+  // Enquanto a nova tradução não chega, a anterior fica apagada
+  function marcarTraducaoPendente() {
+    if (!el.faixaTraducao.textContent) mostrarTraducao('...', true);
+    else el.faixaTraducao.classList.add('pendente');
+  }
+
+  /* =========================================================
+     7. ÁREA DE LEITURA (retângulo guia)
+     ========================================================= */
+  function aplicarArea() {
+    el.guia.style.width = estado.area.largura + '%';
+    el.guia.style.height = estado.area.altura + '%';
+    el.outLargura.textContent = estado.area.largura + '%';
+    el.outAltura.textContent = estado.area.altura + '%';
+  }
+
+  function salvarArea() {
+    gravarStorage(CHAVES.area, estado.area);
+  }
+
+  // Mapeia o retângulo da tela para o tamanho real do vídeo (object-fit: cover)
+  function calcularRecorte() {
+    const vw = el.video.videoWidth;
+    const vh = el.video.videoHeight;
+    if (!vw || !vh) return null;
+    const rv = el.video.getBoundingClientRect();
+    const rg = el.guia.getBoundingClientRect();
+    if (!rv.width || !rv.height) return null;
+
+    // Com "cover" o vídeo é ampliado pelo MAIOR fator e o excesso é cortado nas bordas
+    const escala = Math.max(rv.width / vw, rv.height / vh);
+    const offX = (rv.width - vw * escala) / 2;   // negativo quando sobra vídeo na lateral
+    const offY = (rv.height - vh * escala) / 2;
+
+    let x1 = (rg.left - rv.left - offX) / escala;
+    let y1 = (rg.top - rv.top - offY) / escala;
+    let x2 = (rg.right - rv.left - offX) / escala;
+    let y2 = (rg.bottom - rv.top - offY) / escala;
+    x1 = Math.max(0, x1); y1 = Math.max(0, y1);
+    x2 = Math.min(vw, x2); y2 = Math.min(vh, y2);
+
+    const sw = x2 - x1;
+    const sh = y2 - y1;
+    if (sw < 8 || sh < 8) return null;
+    return { sx: x1, sy: y1, sw: sw, sh: sh };
+  }
+
+  /* =========================================================
+     8. PRÉ-PROCESSAMENTO DA IMAGEM (cinza + limiar de Otsu)
+     ========================================================= */
+  function limiarOtsu(hist, total) {
+    let soma = 0;
+    for (let i = 0; i < 256; i++) soma += i * hist[i];
+    let somaFundo = 0, pesoFundo = 0, melhor = 0, limiar = 127;
+    for (let t = 0; t < 256; t++) {
+      pesoFundo += hist[t];
+      if (pesoFundo === 0) continue;
+      const pesoFrente = total - pesoFundo;
+      if (pesoFrente === 0) break;
+      somaFundo += t * hist[t];
+      const mediaFundo = somaFundo / pesoFundo;
+      const mediaFrente = (soma - somaFundo) / pesoFrente;
+      const variancia = pesoFundo * pesoFrente * (mediaFundo - mediaFrente) * (mediaFundo - mediaFrente);
+      if (variancia > melhor) { melhor = variancia; limiar = t; }
+    }
+    return limiar;
+  }
+
+  // Converte para preto e branco. O texto (que costuma ser a minoria dos pixels)
+  // vira preto sobre branco, que é o formato preferido do Tesseract.
+  function preprocessar(contexto, w, h) {
+    const img = contexto.getImageData(0, 0, w, h);
+    const d = img.data;
+    const total = w * h;
+    const cinza = new Uint8Array(total);
+    const hist = new Uint32Array(256);
+    for (let p = 0, i = 0; p < total; p++, i += 4) {
+      const g = ((d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000) | 0;
+      cinza[p] = g;
+      hist[g]++;
+    }
+    const lim = limiarOtsu(hist, total);
+    let claros = 0;
+    for (let g = lim + 1; g < 256; g++) claros += hist[g];
+    const textoClaro = claros < total / 2;   // legenda branca sobre fundo escuro
+    for (let p = 0, i = 0; p < total; p++, i += 4) {
+      let v = cinza[p] > lim ? 255 : 0;
+      if (textoClaro) v = 255 - v;
+      d[i] = d[i + 1] = d[i + 2] = v;
+      d[i + 3] = 255;
+    }
+    contexto.putImageData(img, 0, 0);
+  }
+
+  /* =========================================================
+     9. CÂMERA
+     ========================================================= */
+  async function abrirCamera() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw criarErro('SemSuporte', 'Este navegador não permite acessar a câmera. Use o Chrome (Android) ou o Safari (iOS) e abra a página por HTTPS.');
+    }
+    let stream;
+    try {
+      // Pede câmera traseira; a resolução é só "ideal" (ajuda o OCR quando disponível)
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false
+      });
+    } catch (e) {
+      if (e && (e.name === 'OverconstrainedError' || e.name === 'ConstraintNotSatisfiedError')) {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+      } else {
+        throw e;
+      }
+    }
+    return stream;
+  }
+
+  function ligarVideo(stream) {
+    el.video.muted = true;
+    el.video.srcObject = stream;
+    // Se a câmera cair (outro app, permissão revogada), para tudo e avisa
+    const trilha = stream.getVideoTracks()[0];
+    if (trilha) {
+      trilha.addEventListener('ended', () => {
+        if (estado.stream !== stream) return;
+        parar('Erro');
+        mostrarErro('A câmera foi desligada ou tomada por outro aplicativo. Toque em Iniciar para reabrir.');
+      });
+    }
+    return new Promise((resolve) => {
+      const pronto = () => {
+        const p = el.video.play();
+        if (p && p.catch) p.catch(() => {});
+        resolve();
+      };
+      if (el.video.readyState >= 1 && el.video.videoWidth) pronto();
+      else {
+        el.video.addEventListener('loadedmetadata', pronto, { once: true });
+        setTimeout(resolve, 5000);   // não trava o início se o evento não vier
+      }
+    });
+  }
+
+  function pararStream(stream) {
+    if (!stream) return;
+    stream.getTracks().forEach((t) => { try { t.stop(); } catch (e) { /* ignora */ } });
+  }
+
+  /* =========================================================
+     10. OCR (Tesseract.js): worker único e reutilizado
+     ========================================================= */
+  function descreverProgressoOcr(m) {
+    if (!m || !m.status) return null;
+    const s = String(m.status);
+    let nome = null;
+    if (s.indexOf('loading tesseract core') === 0) nome = 'Carregando OCR';
+    else if (s.indexOf('initializing tesseract') === 0) nome = 'Iniciando OCR';
+    else if (s.indexOf('loading language traineddata') === 0) nome = 'Baixando idioma inglês';
+    else if (s.indexOf('initializing api') === 0) nome = 'Preparando OCR';
+    if (!nome) return null;
+    const pct = typeof m.progress === 'number' ? Math.round(m.progress * 100) : null;
+    return nome + '...' + (pct !== null && pct > 0 && pct < 100 ? ' ' + pct + '%' : '');
+  }
+
+  function garantirWorker() {
+    if (estado.worker) return Promise.resolve(estado.worker);
+    if (estado.workerPromise) return estado.workerPromise;
+    const T = window.Tesseract;
+    if (!T || typeof T.createWorker !== 'function') {
+      return Promise.reject(criarErro('OcrIndisponivel', 'Não foi possível carregar o Tesseract.js. Verifique a internet e recarregue a página.'));
+    }
+    estado.workerPromise = (async () => {
+      try {
+        const w = await T.createWorker('eng', 1, {
+          logger: (m) => {
+            if (!estado.iniciando) return;
+            const s = descreverProgressoOcr(m);
+            if (s) setStatus(s, 'carregando');
+          }
+        });
+        // PSM 6 = bloco único de texto (bom para legendas de 1 ou 2 linhas)
+        await w.setParameters({
+          tessedit_pageseg_mode: (T.PSM && T.PSM.SINGLE_BLOCK) || '6',
+          preserve_interword_spaces: '1'
+        });
+        estado.worker = w;
+        return w;
+      } catch (e) {
+        estado.workerPromise = null;
+        throw criarErro('OcrIndisponivel', 'Falha ao carregar o OCR: ' + mensagemDeErro(e) + '. Verifique a internet.');
+      }
+    })();
+    return estado.workerPromise;
+  }
+
+  // Desenha só o recorte do retângulo no canvas oculto e lê o texto
+  async function lerRegiao() {
+    if (document.hidden || !estado.worker) return null;
+    const r = calcularRecorte();
+    if (!r) return null;
+    // Amplia recortes pequenos (OCR gosta de letras maiores) e reduz os enormes (desempenho)
+    const escala = r.sw < 1000 ? Math.min(2.5, 1000 / r.sw) : Math.min(1, 1600 / r.sw);
+    const w = Math.max(1, Math.round(r.sw * escala));
+    const h = Math.max(1, Math.round(r.sh * escala));
+    if (el.canvas.width !== w) el.canvas.width = w;
+    if (el.canvas.height !== h) el.canvas.height = h;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(el.video, r.sx, r.sy, r.sw, r.sh, 0, 0, w, h);
+    if (estado.preproc) preprocessar(ctx, w, h);
+    const res = await estado.worker.recognize(el.canvas);
+    const data = res && res.data ? res.data : {};
+    return {
+      texto: data.text || '',
+      confianca: typeof data.confidence === 'number' ? data.confidence : 100
+    };
+  }
+
+  // Loop sem sobreposição: a próxima leitura só começa quando a anterior termina
+  async function cicloOcr(ger) {
+    if (!estado.rodando || ger !== estado.geracaoLoop) return;
+    if (estado.lendo) {   // uma leitura antiga ainda está terminando
+      estado.timerOcr = setTimeout(() => cicloOcr(ger), 100);
+      return;
+    }
+    estado.lendo = true;
+    const inicio = performance.now();
+    try {
+      const leitura = await lerRegiao();
+      if (leitura && estado.rodando && ger === estado.geracaoLoop) {
+        avaliarLeitura(leitura.texto, leitura.confianca);
+      }
+      estado.errosOcrSeguidos = 0;
+    } catch (e) {
+      estado.errosOcrSeguidos++;
+      console.warn('Falha no OCR:', e);
+      if (estado.errosOcrSeguidos === 5) mostrarErro('O OCR está falhando: ' + mensagemDeErro(e), true);
+    } finally {
+      estado.lendo = false;
+    }
+    if (!estado.rodando || ger !== estado.geracaoLoop) return;
+    const gasto = performance.now() - inicio;
+    estado.timerOcr = setTimeout(() => cicloOcr(ger), Math.max(30, INTERVALO_OCR_MS - gasto));
+  }
+
+  /* =========================================================
+     11. FILTRO DE TEXTO E SIMILARIDADE
+     ========================================================= */
+  // Limpa o texto bruto do OCR (quebras de linha e símbolos que costumam ser ruído)
+  function limparTextoOcr(t) {
+    return String(t)
+      .replace(/[\r\n]+/g, ' ')
+      .replace(/[|_~`^*<>{}\[\]\\=«»]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  // Normaliza para comparar: minúsculas, sem acentos, sem pontuação, espaços colapsados
+  function normalizar(t) {
+    return String(t)
+      .toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9'\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  // Distância de Levenshtein (duas linhas de memória)
+  function levenshtein(a, b) {
+    if (a === b) return 0;
+    if (!a.length) return b.length;
+    if (!b.length) return a.length;
+    let anterior = new Array(b.length + 1);
+    let atual = new Array(b.length + 1);
+    for (let j = 0; j <= b.length; j++) anterior[j] = j;
+    for (let i = 1; i <= a.length; i++) {
+      atual[0] = i;
+      const ca = a.charCodeAt(i - 1);
+      for (let j = 1; j <= b.length; j++) {
+        const custo = ca === b.charCodeAt(j - 1) ? 0 : 1;
+        atual[j] = Math.min(anterior[j] + 1, atual[j - 1] + 1, anterior[j - 1] + custo);
+      }
+      const troca = anterior; anterior = atual; atual = troca;
+    }
+    return anterior[b.length];
+  }
+
+  // Similaridade de 0 a 1 (1 = idêntico)
+  function similaridade(a, b) {
+    const maior = Math.max(a.length, b.length);
+    return maior === 0 ? 1 : 1 - levenshtein(a, b) / maior;
+  }
+
+  // Decide se a leitura é uma frase nova
+  function avaliarLeitura(textoBruto, confianca) {
+    const limpo = limparTextoOcr(textoBruto);
+    const norm = normalizar(limpo);
+    if (norm.length < 3) return;                                  // curta demais
+    const letras = (norm.match(/[a-z]/g) || []).length;
+    const semEspacos = norm.replace(/\s/g, '').length;
+    if (letras === 0 || letras / semEspacos < 0.5) return;         // sem letras ou só ruído
+    if (confianca < CONFIANCA_MINIMA) return;                      // leitura duvidosa
+
+    // Mesma legenda (ou erro pequeno) que alguma das últimas aceitas: ignora
+    for (let i = 0; i < estado.historico.length; i++) {
+      if (similaridade(norm, estado.historico[i]) >= LIMIAR_SIMILARIDADE) return;
+    }
+    // Leitura parcial (só um pedaço da última legenda): ignora
+    const ultima = estado.historico[0];
+    if (ultima && norm.length >= 6 && (' ' + ultima + ' ').indexOf(' ' + norm + ' ') !== -1) return;
+
+    estado.historico.unshift(norm);
+    if (estado.historico.length > HISTORICO_FRASES) estado.historico.length = HISTORICO_FRASES;
+    processarFrase(limpo);
+  }
+
+  /* =========================================================
+     12. PERSONAGEM (prefixo "Lucia:" / "Jason:")
+     ========================================================= */
+  function separarPersonagem(texto) {
+    const semTraco = texto.replace(/^[\s\-–—•]+/, '');   // legendas de diálogo começam com "-"
+    const m = semTraco.match(REGEX_PERSONAGEM);
+    if (!m) return { personagem: null, texto: semTraco.trim() };
+    const nome = m[1].toLowerCase().replace('ú', 'u');
+    return { personagem: nome, texto: semTraco.slice(m[0].length).trim() };
+  }
+
+  /* =========================================================
+     13. TRADUÇÃO (MyMemory, com fallback no Google GTX)
+     ========================================================= */
+  // Legendas em CAIXA ALTA traduzem mal; converte para frase normal antes
+  function ajustarCaixa(texto) {
+    if (!/[A-Z]/.test(texto) || /[a-z]/.test(texto)) return texto;
+    let t = texto.toLowerCase();
+    t = t.replace(/(^|[.!?]\s+)([a-z])/g, (m, antes, letra) => antes + letra.toUpperCase());
+    t = t.replace(/\bi\b/g, 'I');
+    return t;
+  }
+
+  function novoControleTraducao() {
+    const c = new AbortController();
+    estado.abortTraducao = c;
+    return c;
+  }
+
+  function cancelarTraducao() {
+    if (estado.abortTraducao) {
+      try { estado.abortTraducao.abort(); } catch (e) { /* ignora */ }
+      estado.abortTraducao = null;
+    }
+  }
+
+  async function traduzirMyMemory(texto, controle) {
+    const url = URL_MYMEMORY + '?q=' + encodeURIComponent(texto) + '&langpair=' + encodeURIComponent('en|pt-BR');
+    const json = await executarComTimeout(controle, TIMEOUT_TRADUCAO_MS, async (sinal) => {
+      const r = await fetch(url, { signal: sinal });
+      if (!r.ok) throw new Error('MyMemory HTTP ' + r.status);
+      return r.json();
+    });
+    const status = Number(json && json.responseStatus);
+    const t = json && json.responseData && json.responseData.translatedText;
+    if (status !== 200 || typeof t !== 'string' || !t.trim() ||
+        /MYMEMORY WARNING|QUERY LENGTH LIMIT|INVALID LANGUAGE PAIR/i.test(t)) {
+      throw new Error('MyMemory indisponível' + (status ? ' (' + status + ')' : ''));
+    }
+    return decodificarEntidades(t).trim();
+  }
+
+  async function traduzirGoogle(texto, controle) {
+    const url = URL_GOOGLE + '?client=gtx&sl=en&tl=pt&dt=t&q=' + encodeURIComponent(texto);
+    const json = await executarComTimeout(controle, TIMEOUT_TRADUCAO_MS, async (sinal) => {
+      const r = await fetch(url, { signal: sinal });
+      if (!r.ok) throw new Error('Google HTTP ' + r.status);
+      return r.json();
+    });
+    if (!Array.isArray(json) || !Array.isArray(json[0])) throw new Error('resposta inesperada do Google');
+    const t = json[0].map((p) => (Array.isArray(p) && typeof p[0] === 'string' ? p[0] : '')).join('').trim();
+    if (!t) throw new Error('tradução vazia');
+    return t;
+  }
+
+  async function traduzir(texto, seq) {
+    const entrada = ajustarCaixa(texto);
+    const chave = entrada.toLowerCase();
+    if (estado.cacheTraducao.has(chave)) return estado.cacheTraducao.get(chave);
+
+    let resultado;
+    try {
+      resultado = await traduzirMyMemory(entrada, novoControleTraducao());
+    } catch (e) {
+      if (e && e.name === 'AbortError') throw e;          // chegou legenda mais nova
+      console.warn('MyMemory falhou, tentando Google:', e);
+      if (seq !== estado.seqFrase) throw erroAbort();
+      resultado = await traduzirGoogle(entrada, novoControleTraducao());
+    }
+
+    estado.cacheTraducao.set(chave, resultado);
+    if (estado.cacheTraducao.size > MAX_CACHE_TRADUCAO) {
+      estado.cacheTraducao.delete(estado.cacheTraducao.keys().next().value);
+    }
+    return resultado;
+  }
+
+  // Fluxo de uma frase nova: personagem -> tradução -> exibição -> voz
+  async function processarFrase(textoLimpo) {
+    const partes = separarPersonagem(textoLimpo);
+    const personagem = partes.personagem;
+    const texto = partes.texto;
+    if (normalizar(texto).replace(/[^a-z]/g, '').length < 2) return;   // só o nome, sem fala
+
+    const seq = ++estado.seqFrase;
+    pararFala();             // só a fala mais recente toca
+    cancelarTraducao();      // tradução antiga não interessa mais
+    mostrarOriginal(personagem, texto);
+    marcarTraducaoPendente();
+    estado.traduzindo = true;
+    atualizarStatusExecucao();
+
+    let traducao = null;
+    try {
+      traducao = await traduzir(texto, seq);   // traduz SEM o prefixo do personagem
+    } catch (e) {
+      if (seq !== estado.seqFrase || (e && e.name === 'AbortError')) return;
+      console.warn('Tradução falhou:', e);
+      mostrarErro('Falha na tradução: ' + mensagemDeErro(e), true);
+    }
+    if (seq !== estado.seqFrase) return;
+
+    estado.traduzindo = false;
+    if (!traducao) {
+      mostrarTraducao('(tradução indisponível)', false);
+      atualizarStatusExecucao();
+      return;
+    }
+    mostrarTraducao(traducao, false);
+    atualizarStatusExecucao();
+    if (estado.vozLigada) {
+      falar(traducao, personagem, seq, null).catch((e) => console.warn('Falha na voz:', e));
+    }
+  }
+
+  // Invalida a frase em andamento (usado ao parar e no teste de voz)
+  function invalidarFraseAtual() {
+    estado.seqFrase++;
+    cancelarTraducao();
+    estado.traduzindo = false;
+    return estado.seqFrase;
+  }
+
+  /* =========================================================
+     14. VOZ: ElevenLabs com fallback no speechSynthesis
+     ========================================================= */
+  // WAV silencioso de 0,1 s, criado em código, usado para "desbloquear" o <audio>
+  function criarWavSilencioso() {
+    const taxa = 8000, n = 800;
+    const buf = new ArrayBuffer(44 + n);
+    const v = new DataView(buf);
+    const escrever = (pos, s) => { for (let i = 0; i < s.length; i++) v.setUint8(pos + i, s.charCodeAt(i)); };
+    escrever(0, 'RIFF'); v.setUint32(4, 36 + n, true); escrever(8, 'WAVE');
+    escrever(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, taxa, true); v.setUint32(28, taxa, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true);
+    escrever(36, 'data'); v.setUint32(40, n, true);
+    for (let i = 0; i < n; i++) v.setUint8(44 + i, 128);   // silêncio em PCM de 8 bits
+    return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+  }
+
+  // Precisa ser chamado DENTRO de um toque do usuário (Iniciar, Voz ON, Testar)
+  function desbloquearAudio() {
+    estado.audioDesbloqueado = true;
+    try {
+      if (!estado.urlAudioAtual) {   // não interrompe uma fala em andamento
+        if (!estado.urlSilencio) estado.urlSilencio = criarWavSilencioso();
+        el.audio.src = estado.urlSilencio;
+        const p = el.audio.play();
+        if (p && p.catch) p.catch(() => {});
+      }
+    } catch (e) { /* ignora */ }
+    try {
+      if ('speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined' &&
+          !window.speechSynthesis.speaking) {
+        const u = new SpeechSynthesisUtterance(' ');
+        u.volume = 0;
+        u.lang = 'pt-BR';
+        window.speechSynthesis.speak(u);
+      }
+    } catch (e) { /* ignora */ }
+  }
+
+  // Libera o áudio do ElevenLabs atual (pausa e revoga a URL do blob)
+  function liberarAudioAtual() {
+    const url = estado.urlAudioAtual;
+    if (!url) return;
+    estado.urlAudioAtual = null;
+    try { el.audio.pause(); } catch (e) { /* ignora */ }
+    el.audio.removeAttribute('src');
+    try { el.audio.load(); } catch (e) { /* ignora */ }
+    try { URL.revokeObjectURL(url); } catch (e) { /* ignora */ }
+  }
+
+  // Cancela tudo o que estiver falando ou sendo gerado (sem fila)
+  function pararFala() {
+    if (estado.abortTts) {
+      try { estado.abortTts.abort(); } catch (e) { /* ignora */ }
+      estado.abortTts = null;
+    }
+    liberarAudioAtual();
+    if ('speechSynthesis' in window) {
+      try { window.speechSynthesis.cancel(); } catch (e) { /* ignora */ }
+    }
+    estado.utteranceAtual = null;
+    estado.falando = false;
+  }
+
+  // Vozes do navegador (a lista pode chegar depois, pelo evento voiceschanged)
+  let vozesNavegador = [];
+  function carregarVozes() {
+    try { vozesNavegador = window.speechSynthesis.getVoices() || []; } catch (e) { vozesNavegador = []; }
+  }
+  function escolherVozPtBr() {
+    if (!vozesNavegador.length) carregarVozes();
+    const lang = (v) => String(v.lang || '').replace('_', '-').toLowerCase();
+    return vozesNavegador.find((v) => lang(v) === 'pt-br') ||
+           vozesNavegador.find((v) => lang(v).indexOf('pt') === 0) || null;
+  }
+
+  // Fallback: voz do navegador. Tom diferente por personagem para distinguir as falas.
+  function falarNavegador(texto, personagem, seq) {
+    if (!('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') {
+      mostrarAviso('Este navegador não tem síntese de voz.');
+      return false;
+    }
+    const synth = window.speechSynthesis;
+    const u = new SpeechSynthesisUtterance(texto);
+    u.lang = 'pt-BR';
+    const voz = escolherVozPtBr();
+    if (voz) u.voice = voz;
+    u.rate = 1.05;
+    u.pitch = personagem === 'lucia' ? 1.25 : (personagem === 'jason' ? 0.8 : 1);
+    u.onstart = () => {
+      if (seq === estado.seqFrase) { estado.falando = true; atualizarStatusExecucao(); }
+    };
+    u.onend = u.onerror = () => {
+      if (seq === estado.seqFrase) { estado.falando = false; atualizarStatusExecucao(); }
+    };
+    estado.utteranceAtual = u;   // mantém referência (evita o Chrome descartar o objeto)
+    const ocupado = synth.speaking || synth.pending;
+    synth.cancel();
+    // Alguns Androids ignoram um speak() logo após o cancel(); um pequeno atraso resolve
+    if (ocupado) setTimeout(() => { if (seq === estado.seqFrase) synth.speak(u); }, 80);
+    else synth.speak(u);
+    return true;
+  }
+
+  async function falarElevenLabs(texto, voiceId, apiKey, seq) {
+    const controle = new AbortController();
+    estado.abortTts = controle;
+    const blob = await executarComTimeout(controle, TIMEOUT_TTS_MS, async (sinal) => {
+      const r = await fetch(URL_ELEVENLABS + encodeURIComponent(voiceId), {
+        method: 'POST',
+        headers: {
+          'xi-api-key': apiKey,
+          'Content-Type': 'application/json',
+          'Accept': 'audio/mpeg'
+        },
+        body: JSON.stringify({
+          text: texto,
+          model_id: 'eleven_flash_v2_5',
+          voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+        }),
+        signal: sinal
+      });
+      if (!r.ok) {
+        let detalhe = '';
+        try {
+          const j = await r.json();
+          const d = j && j.detail;
+          detalhe = typeof d === 'string' ? d : (d && (d.message || d.status)) || '';
+        } catch (e) { /* corpo não é JSON */ }
+        throw new Error('HTTP ' + r.status + (detalhe ? ': ' + detalhe : ''));
+      }
+      return r.blob();
+    });
+    if (estado.abortTts === controle) estado.abortTts = null;
+    if (seq !== estado.seqFrase || controle.signal.aborted) throw erroAbort();
+
+    liberarAudioAtual();
+    const url = URL.createObjectURL(blob);
+    estado.urlAudioAtual = url;
+    el.audio.src = url;
+    try {
+      await el.audio.play();
+    } catch (e) {
+      if (seq !== estado.seqFrase) throw erroAbort();
+      liberarAudioAtual();
+      if (e && e.name === 'NotAllowedError') {
+        throw criarErro('Bloqueado', 'o navegador bloqueou o som; toque em "Voz" ou "Iniciar"');
+      }
+      throw e;
+    }
+    estado.falando = true;
+    atualizarStatusExecucao();
+  }
+
+  // Escolhe o Voice ID pelo personagem e fala. Retorna como a fala foi feita.
+  async function falar(texto, personagem, seq, configTeste) {
+    pararFala();
+    const cfg = configTeste || estado.configVoz;
+    const voiceId = personagem === 'lucia' ? cfg.vozLucia : (personagem === 'jason' ? cfg.vozJason : cfg.vozPadrao);
+    if (cfg.apiKey && voiceId) {
+      try {
+        await falarElevenLabs(texto, voiceId, cfg.apiKey, seq);
+        return 'elevenlabs';
+      } catch (e) {
+        if (seq !== estado.seqFrase || (e && e.name === 'AbortError')) return 'cancelado';
+        console.warn('ElevenLabs falhou:', e);
+        mostrarErro('ElevenLabs falhou (' + mensagemDeErro(e) + '). Usando a voz do navegador.', true);
+      }
+    }
+    if (seq !== estado.seqFrase || (!configTeste && !estado.vozLigada)) return 'cancelado';
+    return falarNavegador(texto, personagem, seq) ? 'navegador' : 'sem-voz';
+  }
+
+  /* =========================================================
+     15. TELA SEMPRE LIGADA (Wake Lock)
+     ========================================================= */
+  async function pedirWakeLock() {
+    if (!('wakeLock' in navigator)) {
+      mostrarAviso('Aviso: este navegador não mantém a tela ligada sozinho. Aumente o tempo de bloqueio da tela do aparelho.', 10000);
+      return;
+    }
+    try {
+      const lock = await navigator.wakeLock.request('screen');
+      estado.wakeLock = lock;
+      lock.addEventListener('release', () => {
+        if (estado.wakeLock === lock) estado.wakeLock = null;
+      });
+    } catch (e) {
+      mostrarAviso('Não foi possível manter a tela ligada (' + mensagemDeErro(e) + ').', 10000);
+    }
+  }
+
+  function liberarWakeLock() {
+    const lock = estado.wakeLock;
+    estado.wakeLock = null;
+    if (lock) {
+      try {
+        const p = lock.release();
+        if (p && p.catch) p.catch(() => {});
+      } catch (e) { /* ignora */ }
+    }
+  }
+
+  // Ao voltar para a aba: reobtém o wake lock (o navegador solta ao esconder) e retoma o vídeo
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || !estado.rodando) return;
+    if (!estado.wakeLock && 'wakeLock' in navigator) pedirWakeLock();
+    const p = el.video.play();
+    if (p && p.catch) p.catch(() => {});
+  });
+
+  /* =========================================================
+     16. INICIAR / PARAR
+     ========================================================= */
+  async function iniciar() {
+    if (estado.rodando || estado.iniciando) return;
+    const token = ++estado.tokenInicio;
+    estado.iniciando = true;
+    atualizarBotaoIniciar();
+    esconderErro();
+    abrirPainel(null);
+    desbloquearAudio();   // síncrono, ainda dentro do toque no botão
+
+    try {
+      setStatus('Abrindo câmera...', 'carregando');
+      const stream = await abrirCamera();
+      if (token !== estado.tokenInicio) { pararStream(stream); return; }
+      estado.stream = stream;
+      await ligarVideo(stream);
+      if (token !== estado.tokenInicio) return;
+
+      setStatus('Carregando OCR...', 'carregando');
+      await garantirWorker();
+      if (token !== estado.tokenInicio) return;
+
+      await pedirWakeLock();
+      if (token !== estado.tokenInicio) { liberarWakeLock(); return; }
+
+      // Tudo pronto: começa o loop de leitura
+      estado.iniciando = false;
+      estado.rodando = true;
+      estado.historico = [];
+      estado.errosOcrSeguidos = 0;
+      document.body.classList.add('rodando');
+      atualizarBotaoIniciar();
+      atualizarStatusExecucao();
+      estado.geracaoLoop++;
+      cicloOcr(estado.geracaoLoop);
+    } catch (e) {
+      if (token !== estado.tokenInicio) return;
+      console.warn('Falha ao iniciar:', e);
+      parar('Erro');
+      mostrarErro(mensagemDeErro(e));
+    }
+  }
+
+  function parar(textoStatus) {
+    estado.tokenInicio++;
+    estado.geracaoLoop++;
+    estado.iniciando = false;
+    estado.rodando = false;
+    clearTimeout(estado.timerOcr);
+    estado.timerOcr = null;
+    invalidarFraseAtual();
+    pararFala();
+    pararStream(estado.stream);
+    estado.stream = null;
+    el.video.srcObject = null;
+    liberarWakeLock();
+    document.body.classList.remove('rodando');
+    atualizarBotaoIniciar();
+    setStatus(textoStatus || 'Parado', textoStatus === 'Erro' ? 'erro' : '');
+  }
+
+  /* =========================================================
+     17. CONFIGURAÇÕES DE VOZ (formulário)
+     ========================================================= */
+  function preencherFormulario() {
+    const c = estado.configVoz;
+    el.cfgKey.value = c.apiKey;
+    el.cfgLucia.value = c.vozLucia;
+    el.cfgJason.value = c.vozJason;
+    el.cfgPadrao.value = c.vozPadrao;
+  }
+
+  function configDoFormulario() {
+    return normalizarConfig({
+      apiKey: el.cfgKey.value,
+      vozLucia: el.cfgLucia.value,
+      vozJason: el.cfgJason.value,
+      vozPadrao: el.cfgPadrao.value
+    });
+  }
+
+  /* =========================================================
+     18. EVENTOS DOS BOTÕES E CONTROLES
+     ========================================================= */
+  el.btnIniciar.addEventListener('click', () => {
+    if (estado.rodando || estado.iniciando) parar('Parado');
+    else iniciar();
+  });
+
+  el.btnVoz.addEventListener('click', () => {
+    estado.vozLigada = !estado.vozLigada;
+    gravarStorage(CHAVES.voz, estado.vozLigada);
+    if (estado.vozLigada) desbloquearAudio();   // gesto do usuário: libera o som
+    else pararFala();                           // OFF: não gera nem toca áudio
+    atualizarBotaoVoz();
+    atualizarStatusExecucao();
+  });
+
+  el.btnConfig.addEventListener('click', () => abrirPainel(el.painelVoz.hidden ? 'voz' : null));
+  el.btnArea.addEventListener('click', () => abrirPainel(el.painelArea.hidden ? 'area' : null));
+  el.cfgFechar.addEventListener('click', () => abrirPainel(null));
+  el.areaFechar.addEventListener('click', () => abrirPainel(null));
+  el.erroFechar.addEventListener('click', esconderErro);
+
+  el.cfgSalvar.addEventListener('click', () => {
+    estado.configVoz = configDoFormulario();
+    const ok = gravarStorage(CHAVES.config, estado.configVoz);
+    el.cfgMsg.textContent = ok
+      ? 'Configurações salvas neste aparelho.'
+      : 'Não foi possível salvar no navegador (modo privado?). Os valores valem até fechar a página.';
+  });
+
+  el.cfgTestar.addEventListener('click', () => {
+    const cfg = configDoFormulario();
+    if (!estado.audioDesbloqueado) desbloquearAudio();
+    const seq = invalidarFraseAtual();
+    atualizarStatusExecucao();
+    el.cfgMsg.textContent = 'Testando...';
+    falar('Olá! Este é um teste da voz padrão.', null, seq, cfg).then((r) => {
+      if (r === 'elevenlabs') el.cfgMsg.textContent = 'ElevenLabs funcionando com o Voice ID Padrão.';
+      else if (r === 'navegador') {
+        el.cfgMsg.textContent = cfg.apiKey && cfg.vozPadrao
+          ? 'O ElevenLabs falhou; tocando com a voz do navegador.'
+          : 'Sem API Key ou Voice ID Padrão: usando a voz do navegador.';
+      } else if (r === 'sem-voz') el.cfgMsg.textContent = 'Este navegador não tem síntese de voz.';
+      else el.cfgMsg.textContent = '';
+    }).catch((e) => {
+      el.cfgMsg.textContent = 'Falha no teste: ' + mensagemDeErro(e);
+    });
+  });
+
+  el.rngLargura.addEventListener('input', () => {
+    estado.area.largura = limitar(el.rngLargura.value, 20, 100, 90);
+    aplicarArea();
+  });
+  el.rngAltura.addEventListener('input', () => {
+    estado.area.altura = limitar(el.rngAltura.value, 5, 60, 18);
+    aplicarArea();
+  });
+  el.rngLargura.addEventListener('change', salvarArea);
+  el.rngAltura.addEventListener('change', salvarArea);
+
+  el.chkPreproc.addEventListener('change', () => {
+    estado.preproc = el.chkPreproc.checked;
+    gravarStorage(CHAVES.preproc, estado.preproc);
+  });
+
+  // Fim de uma fala do ElevenLabs: libera a URL do blob
+  el.audio.addEventListener('ended', () => {
+    liberarAudioAtual();
+    estado.falando = false;
+    atualizarStatusExecucao();
+  });
+  el.audio.addEventListener('error', () => {
+    if (!estado.urlAudioAtual) return;
+    liberarAudioAtual();
+    estado.falando = false;
+    atualizarStatusExecucao();
+  });
+
+  // Saindo da página: solta câmera e wake lock
+  window.addEventListener('pagehide', () => {
+    if (estado.rodando || estado.iniciando) parar('Parado');
+  });
+
+  /* =========================================================
+     19. INICIALIZAÇÃO
+     ========================================================= */
+  if ('speechSynthesis' in window) {
+    carregarVozes();
+    if (typeof window.speechSynthesis.addEventListener === 'function') {
+      window.speechSynthesis.addEventListener('voiceschanged', carregarVozes);
+    } else {
+      window.speechSynthesis.onvoiceschanged = carregarVozes;
+    }
+  }
+
+  el.rngLargura.value = String(estado.area.largura);
+  el.rngAltura.value = String(estado.area.altura);
+  el.chkPreproc.checked = estado.preproc;
+  aplicarArea();
+  atualizarBotaoVoz();
+  atualizarBotaoIniciar();
+  setStatus('Pronto', '');
+
+  if (window.isSecureContext === false) {
+    mostrarAviso('Atenção: abra esta página por HTTPS (ou localhost). Sem isso a câmera não funciona.', 15000);
+  }
+})();
+</script>
+</body>
+</html>
