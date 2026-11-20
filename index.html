@@ -47,7 +47,7 @@ body {
   overscroll-behavior: none;
   touch-action: manipulation;
 }
-button, input { font: inherit; }
+button, input, select { font: inherit; }
 
 /* ---------- Barra superior ---------- */
 #topo {
@@ -112,7 +112,7 @@ button, input { font: inherit; }
   cursor: pointer;
 }
 .btn:active, .btn-pers:active { transform: scale(0.98); }
-.btn:focus-visible, .btn-icone:focus-visible, .btn-pers:focus-visible, input:focus-visible {
+.btn:focus-visible, .btn-icone:focus-visible, .btn-pers:focus-visible, input:focus-visible, select:focus-visible {
   outline: 3px solid var(--destaque);
   outline-offset: 2px;
 }
@@ -201,7 +201,7 @@ button, input { font: inherit; }
 }
 .painel h2 { margin: 0 0 12px; font-size: 18px; }
 .campo { display: block; margin-bottom: 12px; font-size: 14px; color: var(--texto-suave); }
-.campo input {
+.campo input, .campo select {
   display: block;
   width: 100%;
   margin-top: 6px;
@@ -348,7 +348,7 @@ button, input { font: inherit; }
 </head>
 <body>
 
-<!-- Único <audio> para as falas do ElevenLabs -->
+<!-- Único <audio> para as falas do ElevenLabs e da voz masculina (Piper) -->
 <audio id="audio" preload="auto"></audio>
 
 <!-- Barra superior -->
@@ -376,6 +376,13 @@ button, input { font: inherit; }
     <span>Uso com fone de ouvido</span>
   </label>
   <p class="nota">Com fone, deixe ligado. Sem fone, desligue para evitar eco.</p>
+  <label class="campo">Voz
+    <select id="cfg-motor">
+      <option value="piper">Masculina (Piper, baixa do navegador)</option>
+      <option value="aparelho">Voz do aparelho</option>
+    </select>
+  </label>
+  <p class="nota">A voz masculina é baixada uma vez (≈93 MB, prefira Wi-Fi) e fica guardada neste aparelho. Ela fala por Lucia e Jason quando não há Voice ID do ElevenLabs. Se ela falhar, o app usa a voz do aparelho.</p>
   <label class="campo">ElevenLabs API Key
     <input id="cfg-key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Cole sua chave aqui">
   </label>
@@ -385,7 +392,7 @@ button, input { font: inherit; }
   <label class="campo">Voice ID do Jason
     <input id="cfg-jason" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="ID da voz no ElevenLabs">
   </label>
-  <p class="nota">Sem API Key (ou sem o Voice ID da voz escolhida) o app usa uma voz fixa do aparelho em português: mais aguda para Lucia, mais grave para Jason. O modo Auto usa o Voice ID do Jason quando ele existe. A chave fica salva só neste aparelho e é enviada apenas ao ElevenLabs.</p>
+  <p class="nota">Sem API Key (ou sem o Voice ID da voz escolhida) o app usa a opção de "Voz" acima. Com "Voz do aparelho", a voz fica mais aguda para Lucia e mais grave para Jason. O modo Auto usa o Voice ID do Jason quando ele existe. A chave fica salva só neste aparelho e é enviada apenas ao ElevenLabs.</p>
   <div class="linha-botoes">
     <button id="cfg-salvar" class="btn primario" type="button">Salvar</button>
     <button id="cfg-testar" class="btn" type="button">Testar voz</button>
@@ -451,8 +458,31 @@ button, input { font: inherit; }
     voz: 'legendaAoVivo.vozLigada',
     config: 'legendaAoVivo.configVoz',
     personagem: 'legendaAoVivo.personagem',
-    fone: 'legendaAoVivo.usoFone'
+    fone: 'legendaAoVivo.usoFone',
+    motor: 'legendaAoVivo.motorVoz'
   };
+
+  // Voz masculina Piper (pt_BR-faber-medium, MIT) rodando no navegador via WebAssembly.
+  // Mesmo caminho do pacote @mintplex-labs/piper-tts-web 1.0.5 (fonemizador espeak-ng + ONNX Runtime
+  // Web 1.18.0), carregado direto de arquivos com versão fixa. O build "+esm" do jsDelivr não serve:
+  // ele puxa o onnxruntime-web 1.27 e procura um WASM que não existe na pasta 1.18.0 (404).
+  const PIPER = {
+    ortScript: 'https://cdnjs.cloudflare.com/ajax/libs/onnxruntime-web/1.18.0/ort.wasm.min.js',
+    ortSri: 'sha384-SgeB7YRZLYVIvNteTHalidIdVwoxCxFIEnAbq/xbds9+tUeuA7rCxn0j5AwZFUSW',
+    ortWasmBase: 'https://cdnjs.cloudflare.com/ajax/libs/onnxruntime-web/1.18.0/',
+    fonemizadorScript: 'https://cdn.jsdelivr.net/npm/@diffusionstudio/piper-wasm@1.0.0/build/piper_phonemize.js',
+    fonemizadorSri: 'sha384-PMufGRTCTqKC0tPjOTp2UFXycN+yWWjDareOeoy106zJZAHPijaeHDAX/4Pi0I5S',
+    fonemizadorBase: 'https://cdn.jsdelivr.net/npm/@diffusionstudio/piper-wasm@1.0.0/build/',
+    vozBase: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR/faber/medium/pt_BR-faber-medium',
+    nomeCache: 'legenda-piper-v1',
+    tamanhoTexto: '≈93 MB',         // soma dos arquivos abaixo + os dois scripts
+    velocidade: 1.05                 // um pouco mais rápida, como a voz do aparelho
+  };
+  const TIMEOUT_DOWNLOAD_PARADO_MS = 30000;   // download sem receber nada por esse tempo: desiste
+  const TIMEOUT_SCRIPT_MS = 30000;
+  // Módulo WebAssembly mínimo com uma instrução SIMD (o mesmo teste que o ONNX Runtime usa)
+  const WASM_TESTE_SIMD = [0, 97, 115, 109, 1, 0, 0, 0, 1, 4, 1, 96, 0, 0, 3, 2, 1, 0, 10, 30, 1, 28, 0, 65, 0,
+    253, 15, 253, 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 253, 186, 1, 26, 11];
 
   const URL_MYMEMORY = 'https://api.mymemory.translated.net/get';
   const URL_GOOGLE = 'https://translate.googleapis.com/translate_a/single';
@@ -492,7 +522,7 @@ button, input { font: inherit; }
     status: $('status'), aviso: $('aviso'),
     erro: $('erro'), erroTexto: $('erro-texto'), erroFechar: $('erro-fechar'),
     btnConfig: $('btn-config'), painelVoz: $('painel-voz'),
-    cfgFone: $('cfg-fone'),
+    cfgFone: $('cfg-fone'), cfgMotor: $('cfg-motor'),
     cfgKey: $('cfg-key'), cfgLucia: $('cfg-lucia'), cfgJason: $('cfg-jason'),
     cfgSalvar: $('cfg-salvar'), cfgTestar: $('cfg-testar'), cfgFechar: $('cfg-fechar'), cfgMsg: $('cfg-msg'),
     semSuporte: $('sem-suporte'), dica: $('dica'),
@@ -513,6 +543,11 @@ button, input { font: inherit; }
 
   function normalizarPersonagem(p) {
     return p === 'lucia' || p === 'jason' ? p : 'auto';
+  }
+
+  // Voz sem ElevenLabs: 'piper' (masculina, padrão) ou 'aparelho'
+  function normalizarMotor(m) {
+    return m === 'aparelho' ? 'aparelho' : 'piper';
   }
 
   const estado = {
@@ -551,6 +586,7 @@ button, input { font: inherit; }
     vozLigada: lerStorage(CHAVES.voz, true) !== false,
     configVoz: normalizarConfig(lerStorage(CHAVES.config, {})),
     personagem: normalizarPersonagem(lerStorage(CHAVES.personagem, 'auto')),
+    motorVoz: normalizarMotor(lerStorage(CHAVES.motor, 'piper')),
     fila: [],                // frases traduzidas esperando a vez de falar
     processandoFila: false,
     falando: false,
@@ -564,6 +600,22 @@ button, input { font: inherit; }
     pulandoAte: 0,
     // tela
     wakeLock: null
+  };
+
+  // Estado da voz masculina Piper
+  const piper = {
+    pronto: false,           // sessão do modelo e fonemizador prontos
+    carregando: false,       // baixando ou abrindo os arquivos
+    baixando: false,         // algum arquivo veio da rede (não do cache)
+    falhou: false,           // não deu para preparar: usa a voz do aparelho até uma nova tentativa
+    erro: '',
+    promessa: null,
+    porcentagem: 0,
+    progresso: {},           // url -> { recebido, total }
+    arquivos: null,
+    ort: null, sessao: null, config: null,
+    criarFonemizador: null, fonemizador: null, aoImprimir: null,
+    cadeia: Promise.resolve()   // uma síntese por vez
   };
 
   /* =========================================================
@@ -650,6 +702,10 @@ button, input { font: inherit; }
   function atualizarStatus() {
     if (Date.now() < estado.pulandoAte) {
       setStatus('Pulando falas atrasadas', 'carregando');
+    } else if (piper.carregando) {
+      setStatus(piper.baixando
+        ? 'Baixando voz masculina (' + PIPER.tamanhoTexto + ')... ' + piper.porcentagem + '%'
+        : 'Preparando voz masculina...', 'carregando');
     } else if (estado.falando) {
       setStatus('Falando (fila: ' + estado.fila.length + ')', 'falando');
     } else if (estado.pendentesTraducao > 0) {
@@ -1202,7 +1258,7 @@ button, input { font: inherit; }
   }
 
   /* =========================================================
-     9. VOZ: ElevenLabs com queda para a voz do aparelho
+     9. VOZ: ElevenLabs -> voz masculina Piper -> voz do aparelho
      ========================================================= */
   // WAV silencioso de 0,1 s, criado em código, usado para "desbloquear" o <audio>
   function criarWavSilencioso() {
@@ -1414,12 +1470,381 @@ button, input { font: inherit; }
     await tocarAudio(URL.createObjectURL(blob));
   }
 
-  // Escolhe a voz: Lucia -> ID da Lucia; Jason e Auto -> ID do Jason; sem ID -> voz do aparelho
+  /* ---------- Voz masculina Piper (pt_BR-faber-medium) ---------- */
+  function nomeArquivo(url) {
+    return String(url).split('/').pop();
+  }
+
+  function temSimd() {
+    try { return WebAssembly.validate(new Uint8Array(WASM_TESTE_SIMD)); } catch (e) { return false; }
+  }
+
+  // Arquivos grandes, guardados no aparelho. "tamanho" só serve para a porcentagem antes da resposta.
+  function arquivosPiper(simd) {
+    const ortWasm = simd ? 'ort-wasm-simd.wasm' : 'ort-wasm.wasm';
+    return {
+      config: { url: PIPER.vozBase + '.onnx.json', tamanho: 6257 },
+      modelo: { url: PIPER.vozBase + '.onnx', tamanho: 63221984 },
+      ortWasm: { url: PIPER.ortWasmBase + ortWasm, nome: ortWasm, tamanho: simd ? 10595041 : 9758086 },
+      fonWasm: { url: PIPER.fonemizadorBase + 'piper_phonemize.wasm', tamanho: 635212 },
+      fonDados: { url: PIPER.fonemizadorBase + 'piper_phonemize.data', tamanho: 18077249 }
+    };
+  }
+
+  function registrarProgresso(arq, recebido, total) {
+    const p = piper.progresso[arq.url] || (piper.progresso[arq.url] = { recebido: 0, total: arq.tamanho });
+    p.recebido = recebido;
+    if (total > 0) p.total = total;
+    let r = 0, t = 0;
+    Object.keys(piper.progresso).forEach((k) => {
+      const x = piper.progresso[k];
+      r += Math.min(x.recebido, x.total);
+      t += x.total;
+    });
+    const pct = t ? Math.min(99, Math.floor((r * 100) / t)) : 0;
+    if (pct === piper.porcentagem) return;
+    piper.porcentagem = pct;
+    if (!piper.carregando) return;
+    atualizarStatus();
+    avisarDownloadPiper();
+  }
+
+  // O status do topo pode cortar o texto em telas estreitas: o aviso mostra tudo
+  function avisarDownloadPiper() {
+    if (!piper.carregando || !piper.baixando) return;
+    mostrarAviso('Baixando voz masculina (' + PIPER.tamanhoTexto + ')... ' + piper.porcentagem +
+      '%. Só na primeira vez: depois ela fica guardada neste aparelho.', 30000);
+  }
+
+  // Cache API (com try/catch: pode faltar sem HTTPS, em modo privado ou sem espaço)
+  async function abrirCachePiper() {
+    try {
+      const c = window.caches;
+      if (c && typeof c.open === 'function') return await c.open(PIPER.nomeCache);
+    } catch (e) { /* sem cache: baixa e usa só nesta visita */ }
+    return null;
+  }
+
+  async function lerDoCache(cache, url) {
+    if (!cache) return null;
+    try {
+      const r = await cache.match(url);
+      if (!r) return null;
+      const buf = await r.arrayBuffer();
+      const esperado = Number(r.headers.get('X-Tamanho')) || 0;
+      return buf.byteLength > 0 && (!esperado || esperado === buf.byteLength) ? buf : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function guardarNoCache(cache, url, blob) {
+    if (!cache) return;
+    try {
+      await cache.put(url, new Response(blob, {
+        headers: { 'Content-Type': 'application/octet-stream', 'X-Tamanho': String(blob.size) }
+      }));
+    } catch (e) {
+      console.warn('Não foi possível guardar a voz neste aparelho:', e);
+    }
+  }
+
+  // Baixa um arquivo mostrando o progresso; desiste se ficar parado por TIMEOUT_DOWNLOAD_PARADO_MS
+  async function baixarArquivo(arq) {
+    const controle = new AbortController();
+    let expirou = false;
+    let timer = null;
+    const vigiar = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => { expirou = true; controle.abort(); }, TIMEOUT_DOWNLOAD_PARADO_MS);
+    };
+    vigiar();
+    try {
+      const r = await fetch(arq.url, { signal: controle.signal });
+      if (!r.ok) throw new Error('HTTP ' + r.status + ' ao baixar ' + nomeArquivo(arq.url));
+      const total = Number(r.headers.get('Content-Length')) || 0;
+      if (!piper.baixando) {
+        piper.baixando = true;
+        atualizarStatus();
+        avisarDownloadPiper();
+      }
+      registrarProgresso(arq, 0, total);
+      const partes = [];
+      let recebido = 0;
+      const leitor = r.body && typeof r.body.getReader === 'function' ? r.body.getReader() : null;
+      if (leitor) {
+        for (;;) {
+          const parte = await leitor.read();
+          if (parte.done) break;
+          vigiar();
+          partes.push(parte.value);
+          recebido += parte.value.byteLength;
+          registrarProgresso(arq, recebido, total);
+        }
+      } else {
+        const b = await r.arrayBuffer();
+        partes.push(b);
+        recebido = b.byteLength;
+      }
+      if (!recebido || (total && recebido < total)) throw new Error('download incompleto de ' + nomeArquivo(arq.url));
+      registrarProgresso(arq, recebido, total);
+      return new Blob(partes, { type: 'application/octet-stream' });
+    } catch (e) {
+      if (expirou) throw criarErro('TimeoutError', 'tempo esgotado');
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  // Primeiro procura no aparelho; se não tiver, baixa e guarda
+  async function obterArquivo(cache, arq) {
+    const guardado = await lerDoCache(cache, arq.url);
+    if (guardado) {
+      registrarProgresso(arq, guardado.byteLength, guardado.byteLength);
+      return guardado;
+    }
+    const blob = await baixarArquivo(arq);
+    await guardarNoCache(cache, arq.url, blob);
+    return blob.arrayBuffer();
+  }
+
+  // Carrega um script de CDN (versão fixa e hash SRI) que cria uma variável global
+  function carregarScript(url, sri, nomeGlobal) {
+    if (window[nomeGlobal]) return Promise.resolve(window[nomeGlobal]);
+    return new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      const limite = setTimeout(() => falhar(new Error('tempo esgotado ao carregar ' + nomeArquivo(url))), TIMEOUT_SCRIPT_MS);
+      function falhar(e) {
+        clearTimeout(limite);
+        s.onload = null;
+        s.onerror = null;
+        reject(e);
+      }
+      s.onload = () => {
+        if (window[nomeGlobal]) {
+          clearTimeout(limite);
+          resolve(window[nomeGlobal]);
+        } else {
+          falhar(new Error(nomeArquivo(url) + ' não carregou'));
+        }
+      };
+      s.onerror = () => falhar(new Error('falha ao carregar ' + nomeArquivo(url)));
+      s.async = true;
+      s.crossOrigin = 'anonymous';
+      s.integrity = sri;
+      s.src = url;
+      document.head.appendChild(s);
+    });
+  }
+
+  function criarFonemizador(criar, wasm, dados) {
+    return criar({
+      print: (linha) => { if (piper.aoImprimir) piper.aoImprimir(linha); },
+      printErr: (m) => { console.warn('Fonemizador:', m); },
+      locateFile: (nome) => PIPER.fonemizadorBase + nome,
+      wasmBinary: wasm,                    // já baixado: nada de rede aqui
+      getPreloadedPackage: () => dados     // dicionários do espeak-ng
+    });
+  }
+
+  function pedirArmazenamentoPersistente() {
+    try {
+      if (navigator.storage && typeof navigator.storage.persist === 'function') {
+        const p = navigator.storage.persist();
+        if (p && p.catch) p.catch(() => {});
+      }
+    } catch (e) { /* ignora */ }
+  }
+
+  async function iniciarPiper() {
+    const simd = temSimd();
+    const arq = arquivosPiper(simd);
+    piper.arquivos = arq;
+    piper.baixando = false;
+    piper.porcentagem = 0;
+    piper.progresso = {};
+    Object.keys(arq).forEach((k) => { piper.progresso[arq[k].url] = { recebido: 0, total: arq[k].tamanho }; });
+    const cache = await abrirCachePiper();
+    const r = await Promise.all([
+      carregarScript(PIPER.ortScript, PIPER.ortSri, 'ort'),
+      carregarScript(PIPER.fonemizadorScript, PIPER.fonemizadorSri, 'createPiperPhonemize'),
+      obterArquivo(cache, arq.config),
+      obterArquivo(cache, arq.modelo),
+      obterArquivo(cache, arq.ortWasm),
+      obterArquivo(cache, arq.fonWasm),
+      obterArquivo(cache, arq.fonDados)
+    ]);
+    const ort = r[0];
+    let config = null;
+    try { config = JSON.parse(new TextDecoder().decode(r[2])); } catch (e) { /* abaixo */ }
+    if (!config || !config.espeak || !config.audio) throw new Error('configuração da voz inválida');
+    piper.config = config;
+    piper.criarFonemizador = r[1];
+    piper.fonemizador = await criarFonemizador(r[1], r[5], r[6]);
+
+    ort.env.wasm.numThreads = 1;       // sem cross-origin isolation não há threads
+    ort.env.wasm.simd = simd;
+    ort.env.wasm.proxy = false;
+    const urlWasm = URL.createObjectURL(new Blob([r[4]], { type: 'application/wasm' }));
+    ort.env.wasm.wasmPaths = { [arq.ortWasm.nome]: urlWasm };
+    try {
+      // Uint8Array (sem cópia): o ORT só aceita "path" ou "buffer" e confere o tipo com instanceof
+      piper.sessao = await ort.InferenceSession.create(new Uint8Array(r[3]), { executionProviders: ['wasm'] });
+    } finally {
+      try { URL.revokeObjectURL(urlWasm); } catch (e) { /* ignora */ }
+    }
+    piper.ort = ort;
+    if (piper.baixando) pedirArmazenamentoPersistente();
+  }
+
+  // Prepara a voz uma única vez. Nunca rejeita: resolve true (pronta) ou false (usar a voz do aparelho).
+  function prepararPiper() {
+    if (piper.pronto) return Promise.resolve(true);
+    if (piper.falhou) return Promise.resolve(false);
+    if (piper.promessa) return piper.promessa;
+    piper.carregando = true;
+    atualizarStatus();
+    piper.promessa = iniciarPiper().then(() => {
+      piper.pronto = true;
+      if (piper.baixando) mostrarAviso('Voz masculina pronta e guardada neste aparelho.', 4000);
+      return true;
+    }, (e) => {
+      piper.falhou = true;
+      piper.erro = mensagemDeErro(e).slice(0, 120);
+      console.warn('Voz masculina indisponível:', e);
+      mostrarErro('Não deu para preparar a voz masculina (' + piper.erro + '). Usando a voz do aparelho.', true);
+      return false;
+    }).then((ok) => {
+      piper.carregando = false;
+      piper.promessa = null;
+      atualizarStatus();
+      return ok;
+    });
+    return piper.promessa;
+  }
+
+  // Depois de uma falha, um novo toque do usuário (Iniciar, Testar, trocar a voz) tenta de novo
+  function liberarNovaTentativaPiper() {
+    if (!piper.pronto && !piper.promessa) {
+      piper.falhou = false;
+      piper.erro = '';
+    }
+  }
+
+  async function fonemizar(texto) {
+    if (!piper.fonemizador) {
+      // recria depois de um erro, lendo os arquivos do aparelho (ou baixando de novo)
+      const cache = await abrirCachePiper();
+      const arquivos = await Promise.all([obterArquivo(cache, piper.arquivos.fonWasm), obterArquivo(cache, piper.arquivos.fonDados)]);
+      piper.fonemizador = await criarFonemizador(piper.criarFonemizador, arquivos[0], arquivos[1]);
+    }
+    let linha = null;
+    piper.aoImprimir = (l) => { if (linha === null) linha = l; };
+    try {
+      piper.fonemizador.callMain(['-l', piper.config.espeak.voice, '--input', JSON.stringify([{ text: texto }]),
+        '--espeak_data', '/espeak-ng-data']);
+    } catch (e) {
+      piper.fonemizador = null;
+      throw e;
+    } finally {
+      piper.aoImprimir = null;
+    }
+    let ids = null;
+    try { ids = JSON.parse(linha).phoneme_ids; } catch (e) { /* abaixo */ }
+    if (!Array.isArray(ids) || ids.length < 3) throw new Error('não gerou fonemas');
+    return ids;
+  }
+
+  // PCM float (-1..1) para WAV de 16 bits
+  function pcmParaWav(pcm, taxa) {
+    const n = pcm.length;
+    const buf = new ArrayBuffer(44 + n * 2);
+    const v = new DataView(buf);
+    const escrever = (pos, s) => { for (let i = 0; i < s.length; i++) v.setUint8(pos + i, s.charCodeAt(i)); };
+    escrever(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); escrever(8, 'WAVE');
+    escrever(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, taxa, true); v.setUint32(28, taxa * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    escrever(36, 'data'); v.setUint32(40, n * 2, true);
+    for (let i = 0; i < n; i++) {
+      const s = Math.max(-1, Math.min(1, pcm[i] || 0));
+      v.setInt16(44 + i * 2, Math.round(s * 32767), true);
+    }
+    return buf;
+  }
+
+  function numeroOu(v, padrao) {
+    return typeof v === 'number' && isFinite(v) ? v : padrao;
+  }
+
+  async function gerarAudioPiper(texto) {
+    const ids = await fonemizar(texto);
+    const ort = piper.ort;
+    const inf = piper.config.inference || {};
+    const feeds = {
+      input: new ort.Tensor('int64', BigInt64Array.from(ids, (n) => BigInt(n)), [1, ids.length]),
+      input_lengths: new ort.Tensor('int64', BigInt64Array.from([BigInt(ids.length)]), [1]),
+      scales: new ort.Tensor('float32', Float32Array.from([
+        numeroOu(inf.noise_scale, 0.667),
+        numeroOu(inf.length_scale, 1) / PIPER.velocidade,
+        numeroOu(inf.noise_w, 0.8)
+      ]), [3])
+    };
+    if (piper.config.num_speakers > 1) feeds.sid = new ort.Tensor('int64', BigInt64Array.from([BigInt(0)]), [1]);
+    const saida = await piper.sessao.run(feeds);
+    const tensor = saida[piper.sessao.outputNames[0]] || saida.output;
+    const pcm = tensor && tensor.data;
+    if (!pcm || !pcm.length) throw new Error('áudio vazio');
+    return new Blob([pcmParaWav(pcm, piper.config.audio.sample_rate || 22050)], { type: 'audio/wav' });
+  }
+
+  // Sínteses em série (o modelo roda uma por vez)
+  function sintetizarPiper(texto) {
+    const tarefa = piper.cadeia.then(() => gerarAudioPiper(texto));
+    piper.cadeia = tarefa.catch(() => {});
+    return tarefa;
+  }
+
+  // Adianta a síntese do próximo trecho da fila enquanto o atual toca (não toca nada)
+  function preSintetizar(item) {
+    if (!item || item.piperAudio || !piper.pronto || motorDoItem(item) !== 'piper') return;
+    item.piperAudio = sintetizarPiper(item.texto);
+    item.piperAudio.catch(() => {});   // o erro é tratado quando o item for falar
+  }
+
+  async function falarPiper(item, ger) {
+    if (!(await prepararPiper())) throw criarErro('PiperIndisponivel', piper.erro || 'voz masculina indisponível');
+    if (ger !== estado.geracaoFala) throw erroAbort();
+    const blob = await (item.piperAudio || sintetizarPiper(item.texto));
+    if (ger !== estado.geracaoFala) throw erroAbort();
+    preSintetizar(estado.fila[0]);
+    liberarAudioAtual();
+    await tocarAudio(URL.createObjectURL(blob));
+  }
+
+  // Qual voz o item usa primeiro: ElevenLabs (com API Key e Voice ID), senão a escolhida em "Voz"
+  function motorDoItem(item) {
+    const cfg = item.config || estado.configVoz;
+    const p = normalizarPersonagem(item.personagem);
+    if (cfg.apiKey && (p === 'lucia' ? cfg.vozLucia : cfg.vozJason)) return 'elevenlabs';
+    return normalizarMotor(item.motor || estado.motorVoz);
+  }
+
+  // A voz masculina vai ser usada agora? Então já começa a preparar (download na primeira vez)
+  function adiantarPiper() {
+    if (!estado.vozLigada || motorDoItem({ personagem: estado.personagem }) !== 'piper') return;
+    liberarNovaTentativaPiper();
+    prepararPiper();
+  }
+
+  // Prioridade: ElevenLabs -> voz masculina Piper -> voz do aparelho (só se as anteriores falharem).
+  // Lucia -> ID da Lucia; Jason e Auto -> ID do Jason. Sem ID, Lucia e Jason usam a mesma voz masculina.
   async function falarItem(item, ger) {
     const cfg = item.config || estado.configVoz;
     const p = normalizarPersonagem(item.personagem);
     const voiceId = p === 'lucia' ? cfg.vozLucia : cfg.vozJason;
-    let falhouEleven = false;
+    const motor = normalizarMotor(item.motor || estado.motorVoz);
+    item.falhou = '';
     if (cfg.apiKey && voiceId) {
       try {
         await falarElevenLabs(item.texto, voiceId, cfg.apiKey, ger);
@@ -1427,14 +1852,33 @@ button, input { font: inherit; }
       } catch (e) {
         if (ger !== estado.geracaoFala || (e && e.name === 'AbortError')) return 'cancelado';
         console.warn('ElevenLabs falhou:', e);
-        mostrarErro('ElevenLabs falhou (' + mensagemDeErro(e) + '). Usando a voz do aparelho.', true);
-        falhouEleven = true;
+        mostrarErro('ElevenLabs falhou (' + mensagemDeErro(e) + '). Usando a voz ' +
+          (motor === 'piper' && !piper.falhou ? 'masculina' : 'do aparelho') + '.', true);
+        item.falhou = 'elevenlabs';
+      }
+    }
+    if (ger !== estado.geracaoFala) return 'cancelado';
+    if (motor === 'piper') {
+      if (piper.falhou) {
+        item.falhou = 'piper';          // o erro já apareceu quando a voz falhou ao carregar
+      } else {
+        try {
+          await falarPiper(item, ger);
+          return item.falhou ? 'piper-apos-falha' : 'piper';
+        } catch (e) {
+          if (ger !== estado.geracaoFala || (e && e.name === 'AbortError')) return 'cancelado';
+          console.warn('Voz masculina falhou:', e);
+          if (!(e && e.name === 'PiperIndisponivel')) {
+            mostrarErro('A voz masculina falhou (' + mensagemDeErro(e).slice(0, 120) + '). Usando a voz do aparelho.', true);
+          }
+          item.falhou = 'piper';
+        }
       }
     }
     if (ger !== estado.geracaoFala) return 'cancelado';
     const ok = await falarAparelho(item.texto, p);
     if (!ok) return 'sem-voz';
-    return falhouEleven ? 'aparelho-apos-falha' : 'aparelho';
+    return item.falhou ? 'aparelho-apos-falha' : 'aparelho';
   }
 
   // Põe o trecho no fim da fila. Nada é cortado: cada trecho espera o anterior terminar.
@@ -1461,6 +1905,12 @@ button, input { font: inherit; }
     if (estado.processandoFila || !estado.fila.length) return;
     estado.processandoFila = true;
     const ger = estado.geracaoFala;
+    // Voz masculina ainda baixando/abrindo: espera aqui, com o microfone ainda ouvindo.
+    // Os trechos seguintes entram na fila (e os mais antigos são pulados se ela encher).
+    if (motorDoItem(estado.fila[0]) === 'piper' && !piper.pronto && !piper.falhou) {
+      await prepararPiper();
+      if (ger !== estado.geracaoFala) return;   // o usuário parou: pararFala já limpou o estado
+    }
     estado.falando = true;
     atualizarStatus();
     if (!estado.usoFone) await pararEscutaEAguardar();   // anti-eco: não ouve a própria voz
@@ -1555,6 +2005,7 @@ button, input { font: inherit; }
 
     iniciarReconhecimento();   // dentro do toque: o navegador pede a permissão do microfone
     pedirWakeLock();
+    adiantarPiper();           // voz masculina: começa o download/abertura já, sem esperar a 1ª fala
     clearInterval(estado.timerVigia);
     estado.timerVigia = setInterval(vigiarEscuta, VIGIA_ESCUTA_MS);
   }
@@ -1583,6 +2034,7 @@ button, input { font: inherit; }
      ========================================================= */
   function preencherFormulario() {
     el.cfgFone.checked = estado.usoFone;
+    el.cfgMotor.value = estado.motorVoz;
     const c = estado.configVoz;
     el.cfgKey.value = c.apiKey;
     el.cfgLucia.value = c.vozLucia;
@@ -1610,6 +2062,7 @@ button, input { font: inherit; }
     gravarStorage(CHAVES.voz, estado.vozLigada);
     if (estado.vozLigada) {
       desbloquearAudio();   // gesto do usuário: libera o som
+      if (estado.rodando) adiantarPiper();
     } else {
       // OFF: para a fila e a escuta (parar() já esvazia a fila)
       if (estado.rodando) {
@@ -1643,13 +2096,28 @@ button, input { font: inherit; }
     else agendarReinicio(ATRASO_REINICIO_MS);
   });
 
+  // Seletor "Voz": masculina (Piper) ou do aparelho. Vale na hora e fica salvo neste aparelho.
+  el.cfgMotor.addEventListener('change', () => {
+    estado.motorVoz = normalizarMotor(el.cfgMotor.value);
+    const ok = gravarStorage(CHAVES.motor, estado.motorVoz);
+    liberarNovaTentativaPiper();
+    let msg = estado.motorVoz === 'piper'
+      ? (piper.pronto ? 'Voz masculina escolhida.' : 'Voz masculina escolhida. Ela é baixada (' + PIPER.tamanhoTexto + ') ao tocar em Iniciar ou Testar voz.')
+      : 'Voz do aparelho escolhida.';
+    if (!ok) msg += ' Não foi possível salvar no navegador; vale até fechar a página.';
+    el.cfgMsg.textContent = msg;
+    if (estado.rodando) adiantarPiper();
+  });
+
   el.btnConfig.addEventListener('click', () => abrirPainel(el.painelVoz.hidden));
   el.cfgFechar.addEventListener('click', () => abrirPainel(false));
   el.erroFechar.addEventListener('click', esconderErro);
 
   el.cfgSalvar.addEventListener('click', () => {
     estado.configVoz = configDoFormulario();
-    const ok = gravarStorage(CHAVES.config, estado.configVoz);
+    estado.motorVoz = normalizarMotor(el.cfgMotor.value);
+    const okConfig = gravarStorage(CHAVES.config, estado.configVoz);
+    const ok = gravarStorage(CHAVES.motor, estado.motorVoz) && okConfig;
     el.cfgMsg.textContent = ok
       ? 'Configurações salvas neste aparelho.'
       : 'Não foi possível salvar no navegador (modo privado?). Os valores valem até fechar a página.';
@@ -1658,39 +2126,50 @@ button, input { font: inherit; }
   // Testa a voz escolhida no seletor com os valores do formulário (entra na fila, não corta nada)
   el.cfgTestar.addEventListener('click', () => {
     const cfg = configDoFormulario();
+    const motor = normalizarMotor(el.cfgMotor.value);
     desbloquearAudio();
+    liberarNovaTentativaPiper();
     const p = estado.personagem;
     const quem = p === 'lucia' ? 'da Lucia' : (p === 'jason' ? 'do Jason' : 'automática');
     const temId = !!(p === 'lucia' ? cfg.vozLucia : cfg.vozJason);
-    el.cfgMsg.textContent = estado.falando
-      ? 'O teste vai tocar depois da fala atual...'
-      : 'Testando a voz ' + quem + '...';
-    enfileirar({
+    // por que o ElevenLabs não foi usado (vazio se não havia motivo)
+    const semEleven = !cfg.apiKey ? 'Sem API Key' : (!temId
+      ? (p === 'auto' ? 'O modo Auto usa o Voice ID do Jason, que está vazio' : 'Sem o Voice ID ' + quem)
+      : '');
+    const item = {
       texto: 'Olá! Este é um teste da voz ' + quem + '.',
       personagem: p,
       config: cfg,
-      aoTerminar: (r) => {
-        let msg = '';
-        if (r === 'elevenlabs') {
-          msg = 'ElevenLabs funcionando com o Voice ID ' + (p === 'lucia' ? 'da Lucia' : 'do Jason') + '.';
-        } else if (r === 'aparelho-apos-falha') {
-          msg = 'O ElevenLabs falhou; tocou com a voz do aparelho.';
-        } else if (r === 'aparelho') {
-          if (!cfg.apiKey) msg = 'Sem API Key: usando a voz do aparelho.';
-          else if (!temId) msg = p === 'auto'
-            ? 'O modo Auto usa o Voice ID do Jason, que está vazio: usando a voz do aparelho.'
-            : 'Sem o Voice ID ' + quem + ': usando a voz do aparelho.';
-          else msg = 'Tocou com a voz do aparelho.';
-        } else if (r === 'sem-voz') {
-          msg = 'Este navegador não tem síntese de voz.';
-        } else if (r === 'descartado') {
-          msg = 'O teste foi pulado porque a fila estava cheia.';
-        } else if (r === 'erro') {
-          msg = 'Falha no teste de voz.';
-        }
-        el.cfgMsg.textContent = msg;
+      motor: motor
+    };
+    if (estado.falando) el.cfgMsg.textContent = 'O teste vai tocar depois da fala atual...';
+    else if (motorDoItem(item) === 'piper' && !piper.pronto) {
+      el.cfgMsg.textContent = 'Preparando a voz masculina (na primeira vez baixa ' + PIPER.tamanhoTexto + '). O teste toca quando ela estiver pronta.';
+    } else el.cfgMsg.textContent = 'Testando a voz ' + quem + '...';
+    item.aoTerminar = (r) => {
+      let msg = '';
+      if (r === 'elevenlabs') {
+        msg = 'ElevenLabs funcionando com o Voice ID ' + (p === 'lucia' ? 'da Lucia' : 'do Jason') + '.';
+      } else if (r === 'piper') {
+        msg = (semEleven ? semEleven + ': tocou com ' : 'Tocou com ') + 'a voz masculina (Piper).';
+      } else if (r === 'piper-apos-falha') {
+        msg = 'O ElevenLabs falhou; tocou com a voz masculina (Piper).';
+      } else if (r === 'aparelho-apos-falha') {
+        msg = item.falhou === 'piper'
+          ? 'A voz masculina não funcionou' + (piper.erro ? ' (' + piper.erro + ')' : '') + '; tocou com a voz do aparelho.'
+          : 'O ElevenLabs falhou; tocou com a voz do aparelho.';
+      } else if (r === 'aparelho') {
+        msg = (semEleven ? semEleven + ': usando ' : 'Tocou com ') + 'a voz do aparelho.';
+      } else if (r === 'sem-voz') {
+        msg = 'Este navegador não tem síntese de voz.';
+      } else if (r === 'descartado') {
+        msg = 'O teste foi pulado porque a fila estava cheia.';
+      } else if (r === 'erro') {
+        msg = 'Falha no teste de voz.';
       }
-    });
+      el.cfgMsg.textContent = msg;
+    };
+    enfileirar(item);
   });
 
   // Saindo da página: solta microfone e wake lock
@@ -1714,6 +2193,7 @@ button, input { font: inherit; }
   atualizarBotaoIniciar();
   atualizarSeletor();
   el.cfgFone.checked = estado.usoFone;
+  el.cfgMotor.value = estado.motorVoz;
 
   if (!Reconhecimento) {
     // Ex.: iPhone/Safari ou navegadores sem Web Speech API
