@@ -384,6 +384,7 @@ button, input { font: inherit; }
   const ESPERA_FIM_ESCUTA_MS = 700;     // espera o microfone fechar antes de falar
   const JANELA_REPETICAO_MS = 4000;     // frase repetida dentro disso é ignorada
   const VIGIA_ESCUTA_MS = 3000;         // de quanto em quanto tempo confere se a escuta está viva
+  const ESPERA_PARCIAL_MS = 1500;       // parcial parado por esse tempo é tratado como frase final
 
   const PITCH = { lucia: 1.25, jason: 0.8, auto: 1 };
   const NOMES = { lucia: 'Lucia', jason: 'Jason', auto: 'Auto' };
@@ -691,8 +692,22 @@ button, input { font: inherit; }
     const rec = new Reconhecimento();
     rec.lang = 'en-US';
     rec.continuous = true;
-    rec.interimResults = false;       // só frases finais
+    // Parciais ligados: com som contínuo do jogo (música, efeitos) o navegador pode nunca
+    // marcar a frase como final. Parcial que fica parado ESPERA_PARCIAL_MS vira frase.
+    rec.interimResults = true;
     rec.maxAlternatives = 1;
+    let parcial = null;               // { i, texto } último resultado ainda não final
+    let timerParcial = null;
+    const promovidos = new Set();     // índices já enviados como parcial estável
+    const promoverParcial = () => {
+      clearTimeout(timerParcial);
+      timerParcial = null;
+      if (!parcial) return;
+      const p = parcial;
+      parcial = null;
+      promovidos.add(p.i);
+      receberFrase(p.texto);
+    };
 
     rec.onstart = () => {
       if (rec !== estado.rec) return;
@@ -706,8 +721,17 @@ button, input { font: inherit; }
       const lista = ev.results;
       for (let i = ev.resultIndex || 0; i < lista.length; i++) {
         const r = lista[i];
-        if (!r || !r.isFinal || !r[0]) continue;
-        receberFrase(r[0].transcript || '');
+        if (!r || !r[0]) continue;
+        const t = r[0].transcript || '';
+        if (r.isFinal) {
+          if (parcial && parcial.i === i) { clearTimeout(timerParcial); timerParcial = null; parcial = null; }
+          if (promovidos.has(i)) continue;   // já foi traduzida como parcial estável
+          receberFrase(t);
+        } else if (!parcial || parcial.i !== i || parcial.texto !== t) {
+          parcial = { i: i, texto: t };
+          clearTimeout(timerParcial);
+          timerParcial = setTimeout(promoverParcial, ESPERA_PARCIAL_MS);
+        }
       }
     };
 
@@ -717,6 +741,7 @@ button, input { font: inherit; }
     };
 
     rec.onend = () => {
+      if (parcial) promoverParcial();     // sessão fechou com frase sem "final": não perde
       if (rec !== estado.rec) return;
       estado.recAtivo = false;
       estado.recComecou = false;
@@ -870,7 +895,10 @@ button, input { font: inherit; }
     atualizarStatus();
     estado.cadeiaTraducao = estado.cadeiaTraducao
       .then(() => traduzirItem(item, ger))
-      .catch((e) => console.warn('Falha ao processar frase:', e))
+      .catch((e) => {
+        console.log('Falha ao processar frase:', e);
+        mostrarErro('Falha ao processar frase: ' + mensagemDeErro(e), true);
+      })
       .then(() => {
         if (ger !== estado.geracaoTraducao) return;
         estado.pendentesTraducao = Math.max(0, estado.pendentesTraducao - 1);
